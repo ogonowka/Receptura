@@ -1,0 +1,17 @@
+{
+  "name": "Receptura — menedżer przepisów",
+  "short_name": "Receptura",
+  "description": "Osobisty menedżer przepisów kulinarnych",
+  "start_url": "./app.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#faf8f3",
+  "theme_color": "#b4472e",
+  "lang": "pl",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

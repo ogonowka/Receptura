@@ -1,0 +1,1898 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Receptura — menedżer przepisów</title>
+<meta name="description" content="Receptura — osobisty menedżer przepisów">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#b4472e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Receptura">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --paper:#faf8f3;
+    --card:#ffffff;
+    --ink:#23201b;
+    --ink-soft:#6b6459;
+    --line:#e3ddd0;
+    --line-strong:#cfc7b6;
+    --accent:#b4472e;        /* przygaszona cegła */
+    --accent-soft:#f3e2dc;
+    --accent-ink:#8a3320;
+    --sage:#5c6f52;          /* zielony do kroków */
+    --sage-soft:#e7ede1;
+    --amber:#a8791f;
+    --shadow:0 1px 2px rgba(35,32,27,.06),0 8px 24px rgba(35,32,27,.06);
+    --shadow-lift:0 4px 8px rgba(35,32,27,.08),0 16px 40px rgba(35,32,27,.12);
+    --mono:'DM Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    --serif:'Fraunces','Georgia',serif;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+    html{scroll-behavior:auto}
+  }
+
+  /* ---------- Layout ---------- */
+  .app{max-width:1180px;margin:0 auto;padding:0 24px}
+
+  header.top{
+    position:sticky;top:0;z-index:50;
+    background:rgba(250,248,243,.88);
+    backdrop-filter:saturate(140%) blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .top-inner{
+    max-width:1180px;margin:0 auto;padding:14px 24px;
+    display:flex;align-items:center;gap:20px;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px;cursor:pointer;user-select:none;flex-shrink:0}
+  .brand .mark{
+    font-family:var(--serif);font-weight:600;font-size:22px;letter-spacing:-.01em;color:var(--ink);
+  }
+  .brand .mark em{color:var(--accent);font-style:normal}
+  .brand .sub{font-family:var(--mono);font-size:11px;color:var(--ink-soft);letter-spacing:.04em}
+
+  .search{
+    flex:1;max-width:440px;position:relative;
+  }
+  .search input{
+    width:100%;padding:9px 14px 9px 38px;
+    border:1px solid var(--line-strong);border-radius:10px;
+    background:var(--card);font-family:var(--sans);font-size:14px;color:var(--ink);
+    transition:border-color .15s,box-shadow .15s;
+  }
+  .search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink-soft)}
+
+  .top-actions{display:flex;gap:8px;align-items:center;margin-left:auto}
+
+  button,.btn{
+    font-family:var(--sans);font-size:13.5px;font-weight:500;
+    border:1px solid var(--line-strong);background:var(--card);color:var(--ink);
+    padding:8px 14px;border-radius:9px;cursor:pointer;
+    transition:all .14s;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
+  }
+  button:hover,.btn:hover{border-color:var(--ink-soft);transform:translateY(-1px)}
+  button:active{transform:translateY(0)}
+  button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px
+  }
+  .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-ink);border-color:var(--accent-ink)}
+  .btn-ghost{border-color:transparent;background:transparent;padding:8px 10px}
+  .btn-ghost:hover{background:var(--sage-soft);border-color:transparent}
+  .btn-sm{padding:5px 10px;font-size:12.5px}
+  .btn-danger{color:var(--accent);border-color:var(--accent-soft)}
+  .btn-danger:hover{background:var(--accent-soft);border-color:var(--accent)}
+
+  /* ---------- Filter bar ---------- */
+  .filterbar{padding:20px 0 6px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .filterbar .label{font-family:var(--mono);font-size:11px;color:var(--ink-soft);letter-spacing:.06em;text-transform:uppercase;margin-right:4px}
+  .chip{
+    font-family:var(--sans);font-size:12.5px;
+    padding:5px 12px;border-radius:20px;border:1px solid var(--line-strong);
+    background:var(--card);color:var(--ink-soft);cursor:pointer;transition:all .13s;
+  }
+  .chip:hover{border-color:var(--ink-soft);color:var(--ink)}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .chip.cuisine.on{background:var(--sage);border-color:var(--sage)}
+  .count{font-family:var(--mono);font-size:12px;color:var(--ink-soft);margin-left:auto}
+
+  /* ---------- Grid of cards ---------- */
+  .grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+    gap:16px;padding:20px 0 60px;
+  }
+  .rcard{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px 18px 16px;cursor:pointer;transition:all .16s;position:relative;
+    display:flex;flex-direction:column;min-height:130px;
+  }
+  .rcard:hover{transform:translateY(-2px);box-shadow:var(--shadow-lift);border-color:var(--line-strong)}
+  .rcard .idx{
+    position:absolute;top:16px;right:16px;font-family:var(--mono);
+    font-size:11px;color:var(--line-strong);
+  }
+  .rcard h3{
+    font-family:var(--serif);font-weight:600;font-size:19px;line-height:1.2;
+    letter-spacing:-.01em;margin-bottom:8px;padding-right:26px;
+  }
+  .rcard .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto;padding-top:12px}
+  .rcard .t{font-family:var(--mono);font-size:10.5px;letter-spacing:.02em;
+    padding:2px 8px;border-radius:5px;background:var(--sage-soft);color:var(--sage)}
+  .rcard .t.dish{background:var(--accent-soft);color:var(--accent-ink)}
+  .rcard .meta{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:6px}
+  .rcard .linkbadge{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);
+    font-size:10.5px;color:var(--amber);margin-top:6px}
+
+  .empty{
+    grid-column:1/-1;text-align:center;padding:80px 20px;color:var(--ink-soft);
+  }
+  .empty .big{font-family:var(--serif);font-size:26px;color:var(--ink);margin-bottom:10px}
+  .empty p{margin-bottom:20px;font-size:14.5px}
+
+  /* ---------- Detail view ---------- */
+  .detail{padding:26px 0 80px;max-width:820px;margin:0 auto;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .back{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);background:none;
+    border:none;padding:6px 0;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+  .back:hover{color:var(--accent);transform:none}
+  .detail h1{font-family:var(--serif);font-weight:700;font-size:38px;line-height:1.08;
+    letter-spacing:-.02em;margin:14px 0 12px}
+  .detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px}
+  .detail-tags .t{font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:6px;
+    background:var(--sage-soft);color:var(--sage)}
+  .detail-tags .t.dish{background:var(--accent-soft);color:var(--accent-ink)}
+
+  .servings-ctrl{display:flex;align-items:center;gap:12px;padding:14px 18px;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:26px}
+  .servings-ctrl .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--ink-soft)}
+  .stepper{display:flex;align-items:center;gap:2px;margin-left:auto}
+  .stepper button{width:32px;height:32px;padding:0;justify-content:center;font-size:18px;
+    font-family:var(--serif);border-radius:8px}
+  .stepper .val{font-family:var(--mono);font-size:16px;font-weight:500;min-width:44px;
+    text-align:center;color:var(--ink)}
+  .servings-ctrl .reset{font-family:var(--mono);font-size:11px;color:var(--amber);
+    background:none;border:none;cursor:pointer;padding:4px 6px}
+  .servings-ctrl .reset:hover{text-decoration:underline;transform:none}
+  .servings-ctrl .reset.hidden{visibility:hidden}
+
+  .section-h{font-family:var(--serif);font-weight:600;font-size:15px;letter-spacing:.02em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 14px;display:flex;align-items:baseline;gap:10px}
+  .section-h::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .cols{display:grid;grid-template-columns:1fr 1.15fr;gap:44px;align-items:start}
+  @media(max-width:720px){.cols{grid-template-columns:1fr;gap:32px}}
+
+  .ing-group{margin-bottom:20px}
+  .ing-group .grp-title{font-family:var(--sans);font-weight:600;font-size:13px;
+    color:var(--ink-soft);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .ing-group.sub{margin-left:14px;padding-left:14px;border-left:2px solid var(--accent-soft)}
+  .ing-group.sub .grp-title{color:var(--accent-ink);font-size:12.5px}
+  ul.ings{list-style:none}
+  ul.ings li{display:flex;gap:10px;padding:5px 0;font-size:14.5px;border-bottom:1px dotted var(--line);
+    align-items:baseline}
+  ul.ings li:last-child{border-bottom:none}
+  .qty{font-family:var(--mono);font-size:13.5px;color:var(--accent-ink);font-weight:500;
+    min-width:64px;flex-shrink:0;font-variant-numeric:tabular-nums}
+  .qty.scaled{color:var(--amber)}
+  .ing-name{flex:1}
+  .ing-link{color:var(--sage);font-weight:500;text-decoration:none;border-bottom:1.5px solid var(--sage-soft);
+    cursor:pointer;transition:border-color .13s}
+  .ing-link:hover{border-color:var(--sage)}
+  .ing-link::after{content:" ↗";font-size:11px;color:var(--amber);vertical-align:super}
+
+  ol.steps{list-style:none;counter-reset:step}
+  ol.steps li{position:relative;padding:0 0 20px 44px;counter-increment:step;font-size:15px;line-height:1.6}
+  ol.steps li::before{content:counter(step);position:absolute;left:0;top:-2px;
+    width:30px;height:30px;border-radius:50%;background:var(--sage);color:#fff;
+    font-family:var(--mono);font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center}
+  ol.steps li::after{content:"";position:absolute;left:14px;top:32px;bottom:6px;width:1.5px;background:var(--sage-soft)}
+  ol.steps li:last-child::after{display:none}
+
+  .usedin{margin-top:34px;padding:16px 20px;background:var(--sage-soft);border-radius:12px}
+  .usedin .h{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--sage);margin-bottom:8px}
+  .usedin a{display:inline-block;color:var(--ink);text-decoration:none;font-weight:500;
+    padding:4px 12px;background:var(--card);border-radius:7px;margin:0 6px 6px 0;font-size:13.5px;
+    border:1px solid var(--line);cursor:pointer}
+  .usedin a:hover{border-color:var(--sage)}
+
+  .detail-actions{display:flex;gap:8px;margin:30px 0 0;padding-top:22px;border-top:1px solid var(--line)}
+  .notes-block{margin-top:26px;padding:16px 20px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;font-size:14px;color:var(--ink-soft);white-space:pre-wrap}
+  .notes-block .h{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--amber);margin-bottom:8px}
+
+  /* ---------- Modal / editor ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(35,32,27,.42);z-index:100;
+    display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;
+    animation:fade .18s ease}
+  .modal{background:var(--paper);border-radius:16px;max-width:760px;width:100%;
+    box-shadow:var(--shadow-lift);animation:pop .2s ease;margin:auto}
+  @keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+  .modal-head{display:flex;align-items:center;padding:20px 24px;border-bottom:1px solid var(--line);
+    position:sticky;top:0;background:var(--paper);border-radius:16px 16px 0 0;z-index:2}
+  .modal-head h2{font-family:var(--serif);font-size:22px;font-weight:600}
+  .modal-head .x{margin-left:auto;background:none;border:none;font-size:20px;color:var(--ink-soft);
+    cursor:pointer;padding:4px 10px;border-radius:8px}
+  .modal-head .x:hover{background:var(--line);transform:none}
+  .modal-body{padding:24px}
+  .field{margin-bottom:18px}
+  .field label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
+  .field input[type=text],.field textarea,.field select,.field input[type=number]{
+    width:100%;padding:10px 12px;border:1px solid var(--line-strong);border-radius:9px;
+    background:var(--card);font-family:var(--sans);font-size:14px;color:var(--ink);resize:vertical}
+  .field input:focus,.field textarea:focus,.field select:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-soft)}
+  .field .hint{font-size:11.5px;color:var(--ink-soft);margin-top:5px;line-height:1.4}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:560px){.two{grid-template-columns:1fr}}
+
+  /* ingredient editor rows */
+  .ing-editor .grp{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:var(--card)}
+  .ing-editor .grp.subgrp{margin-left:16px;border-left:3px solid var(--accent-soft)}
+  .grp-head{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+  .grp-head input{flex:1;font-weight:600;border:none;background:var(--paper);padding:6px 10px;
+    border-radius:7px;font-family:var(--sans);font-size:13.5px}
+  .grp-head input:focus{outline:none;box-shadow:0 0 0 2px var(--accent-soft)}
+  .ing-row{display:flex;gap:6px;margin-bottom:6px;align-items:center}
+  .ing-row input.line{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:7px;font-size:13.5px;font-family:var(--sans)}
+  .ing-row select.linksel{width:150px;padding:7px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;font-family:var(--sans);color:var(--ink-soft)}
+  .ing-row .del{padding:6px 9px;color:var(--ink-soft);border-color:transparent;background:none}
+  .ing-row .del:hover{color:var(--accent);background:var(--accent-soft);transform:none}
+  .drag{cursor:grab;color:var(--line-strong);padding:0 2px;user-select:none;font-size:15px}
+  .add-row{font-size:12.5px;color:var(--sage);background:none;border:1px dashed var(--line-strong);
+    width:100%;justify-content:center;padding:7px;border-radius:8px;margin-top:4px}
+  .add-row:hover{border-color:var(--sage);background:var(--sage-soft);transform:none}
+  .grp-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+
+  .tag-input-wrap{display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--line-strong);
+    border-radius:9px;background:var(--card);min-height:44px;align-items:center}
+  .tag-pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:12px;
+    padding:3px 6px 3px 10px;border-radius:6px}
+  .tag-pill.cuisine{background:var(--sage-soft);color:var(--sage)}
+  .tag-pill.dish{background:var(--accent-soft);color:var(--accent-ink)}
+  .tag-pill button{background:none;border:none;cursor:pointer;color:inherit;padding:0 2px;font-size:14px}
+  .tag-pill button:hover{transform:none}
+  .tag-input-wrap input{border:none;background:none;flex:1;min-width:120px;padding:4px;font-size:13.5px;font-family:var(--sans)}
+  .tag-input-wrap input:focus{outline:none}
+  .tag-suggest{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .tag-suggest button{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:5px;
+    background:var(--paper);color:var(--ink-soft);border:1px solid var(--line)}
+
+  .modal-foot{display:flex;gap:10px;padding:18px 24px;border-top:1px solid var(--line);
+    position:sticky;bottom:0;background:var(--paper);border-radius:0 0 16px 16px}
+  .modal-foot .spacer{flex:1}
+
+  /* import modal */
+  .import-tabs{display:flex;gap:6px;margin-bottom:16px}
+  .import-tabs button{flex:1;justify-content:center}
+  .import-tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .parse-preview{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;
+    margin-top:14px;font-size:13px;max-height:280px;overflow-y:auto}
+  .parse-preview .pv-h{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);text-transform:uppercase;
+    letter-spacing:.05em;margin:10px 0 4px}
+  .parse-preview .pv-h:first-child{margin-top:0}
+  .parse-preview .pv-title{font-family:var(--serif);font-size:17px;color:var(--ink)}
+  .parse-preview ul{list-style:none;padding-left:0}
+  .parse-preview li{padding:2px 0;color:var(--ink-soft)}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:var(--ink);color:#fff;padding:12px 22px;border-radius:10px;font-size:14px;
+    box-shadow:var(--shadow-lift);z-index:200;transition:transform .3s cubic-bezier(.2,.8,.2,1);opacity:.97}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--accent-ink)}
+
+  .sortsel{margin-left:8px;padding:6px 10px;border:1px solid var(--line-strong);border-radius:8px;
+    background:var(--card);font-family:var(--sans);font-size:13px;color:var(--ink)}
+
+  @media(max-width:640px){
+    .top-inner{flex-wrap:wrap}
+    .search{order:3;flex-basis:100%;max-width:none}
+    .detail h1{font-size:30px}
+  }
+  .navbtn.on{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+
+  /* widoki (szukaj / tagi) */
+  .viewtitle{font-family:var(--serif);font-weight:700;font-size:34px;letter-spacing:-.02em;margin:24px 0 8px}
+  .viewsub{color:var(--ink-soft);font-size:14.5px;max-width:620px;margin-bottom:20px;line-height:1.5}
+  .searchview,.tagview{padding-bottom:70px}
+
+  .chosen-ings{display:flex;flex-wrap:wrap;gap:7px;align-items:center;min-height:36px;margin-bottom:14px}
+  .ing-add-row input{width:100%;max-width:560px;padding:10px 14px;border:1px solid var(--line-strong);
+    border-radius:10px;font-family:var(--sans);font-size:14px;background:var(--card)}
+  .ing-add-row input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .ing-cloud{display:flex;flex-wrap:wrap;gap:7px}
+  .ing-chip{font-family:var(--sans);font-size:13px;padding:6px 12px;border-radius:20px;
+    border:1px solid var(--line-strong);background:var(--card);color:var(--ink);cursor:pointer;transition:all .12s;
+    display:inline-flex;align-items:center;gap:6px}
+  .ing-chip:hover{border-color:var(--sage);transform:translateY(-1px)}
+  .ing-chip.on{background:var(--sage);border-color:var(--sage);color:#fff}
+  .ing-chip .c{font-family:var(--mono);font-size:10.5px;opacity:.6}
+  .ing-chip.on .c{opacity:.85}
+
+  .match-badge{position:absolute;top:16px;right:16px;font-family:var(--mono);font-size:12px;font-weight:500;
+    color:var(--sage);background:var(--sage-soft);padding:2px 8px;border-radius:6px}
+  .match-bar{height:4px;background:var(--line);border-radius:3px;overflow:hidden;margin:8px 0 4px}
+  .match-bar span{display:block;height:100%;background:var(--sage);border-radius:3px;transition:width .3s}
+
+  /* zakładka tagów */
+  .tag-manage-list{display:flex;flex-direction:column;gap:8px}
+  .tag-manage-row{display:flex;align-items:center;gap:14px;padding:10px 14px;background:var(--card);
+    border:1px solid var(--line);border-radius:10px;flex-wrap:wrap}
+  .tm-count{font-family:var(--mono);font-size:12px;color:var(--ink-soft)}
+  .tm-actions{margin-left:auto;display:flex;gap:6px}
+  .bulk-tag-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .bulk-input{flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line-strong);border-radius:9px;
+    font-family:var(--sans);font-size:14px;background:var(--card)}
+  .bulk-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .bulk-list{display:flex;flex-direction:column;gap:2px;max-height:420px;overflow-y:auto;
+    border:1px solid var(--line);border-radius:10px;padding:6px;background:var(--card)}
+  .bulk-item{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .1s}
+  .bulk-item:hover{background:var(--paper)}
+  .bulk-item input{width:17px;height:17px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+  .bulk-name{font-size:14px;font-weight:500;flex-shrink:0;min-width:180px}
+  .bulk-tags{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);flex:1}
+  @media(max-width:560px){.bulk-name{min-width:0}.bulk-tags{flex-basis:100%;margin-left:29px}}
+
+  /* ---------- Przycisk gotowania ---------- */
+  .btn-cook{background:var(--sage);border-color:var(--sage);color:#fff;font-weight:600}
+  .btn-cook:hover{background:#4d5e45;border-color:#4d5e45}
+
+  /* ---------- TRYB GOTOWANIA (pełny ekran) ---------- */
+  .cook-overlay{position:fixed;inset:0;z-index:300;background:var(--paper);display:flex;flex-direction:column;
+    padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0);animation:fade .2s ease}
+  .cook-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line);flex-shrink:0}
+  .cook-title{font-family:var(--serif);font-size:20px;font-weight:600;flex:1;text-align:center;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cook-x,.cook-ings-toggle{background:none;border:none;font-size:22px;cursor:pointer;padding:8px;border-radius:10px;
+    color:var(--ink-soft);line-height:1;min-width:44px;min-height:44px}
+  .cook-x:hover,.cook-ings-toggle:hover{background:var(--line);transform:none}
+  .cook-ings{max-height:0;overflow:hidden;transition:max-height .25s ease;border-bottom:1px solid var(--line);flex-shrink:0}
+  .cook-ings.open{max-height:50vh;overflow-y:auto}
+  .cook-ings-inner{padding:16px 22px}
+  .cook-serv{font-size:16px;margin-bottom:12px;color:var(--ink-soft)}
+  .cook-serv button{min-width:40px;min-height:40px;font-size:20px;padding:0;border-radius:8px;font-family:var(--serif)}
+  .cook-serv b{font-family:var(--mono);font-size:18px;margin:0 6px;color:var(--ink)}
+  .cook-scaled{font-family:var(--mono);font-size:12px;color:var(--amber)}
+  .cook-ing-grp{font-weight:600;color:var(--accent-ink);margin:12px 0 4px;font-size:15px}
+  .cook-ing{display:flex;gap:12px;padding:7px 0;font-size:17px;border-bottom:1px dotted var(--line);align-items:baseline}
+  .cook-ing:last-child{border-bottom:none}
+  .cook-ing .cq{font-family:var(--mono);color:var(--accent-ink);font-weight:500;min-width:80px;flex-shrink:0}
+  .cook-body{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
+    padding:30px 28px;overflow-y:auto;text-align:center}
+  .cook-stepno{font-family:var(--mono);font-size:14px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--sage);margin-bottom:24px}
+  .cook-steptext{font-family:var(--serif);font-size:30px;line-height:1.4;max-width:680px;color:var(--ink)}
+  .cook-progress{height:6px;background:var(--line);flex-shrink:0}
+  .cook-progress span{display:block;height:100%;background:var(--sage);transition:width .3s}
+  .cook-nav{display:flex;gap:14px;padding:18px 22px;flex-shrink:0;border-top:1px solid var(--line)}
+  .cook-nav button{flex:1;min-height:60px;font-size:19px;font-weight:600;border-radius:14px;justify-content:center}
+  .cook-prev{background:var(--card)}
+  .cook-next,.cook-done{background:var(--sage);border-color:var(--sage);color:#fff}
+  .cook-next:hover,.cook-done:hover{background:#4d5e45;border-color:#4d5e45}
+  .cook-prev:disabled{opacity:.4;cursor:default}
+  @media(max-width:560px){.cook-steptext{font-size:25px}.cook-title{font-size:17px}}
+
+  /* ---------- Poprawki pod dotyk / wąski ekran ---------- */
+  @media(max-width:860px){
+    /* nawigacja: zwijamy etykiety akcji do ikon, zostawiamy główne zakładki */
+    .top-actions{gap:4px;flex-wrap:wrap}
+    .top-actions .btn-sm{padding:8px 10px}
+  }
+  @media(max-width:640px){
+    /* większe pola dotykowe w całej apce */
+    button,.btn{min-height:42px}
+    .btn-sm{min-height:38px}
+    .top-inner{gap:10px;padding:12px 16px}
+    .app{padding:0 16px}
+    /* edytor składników: dropdown linku pod spód, nie obok */
+    .ing-row{flex-wrap:wrap}
+    .ing-row input.line{min-width:0;flex:1 1 100%}
+    .ing-row select.linksel{width:100%;flex:1 1 100%}
+    .ing-row .del{margin-left:auto}
+    /* karty przepisów pełna szerokość czytelniej */
+    .grid{grid-template-columns:1fr}
+    .detail h1{font-size:26px}
+    .cols{gap:28px}
+    /* stepper porcji większy */
+    .stepper button{width:40px;height:40px}
+    .servings-ctrl{flex-wrap:wrap}
+    /* modal edytora na całą szerokość */
+    .modal{border-radius:12px}
+    .modal-body{padding:18px}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand" onclick="goHome()">
+      <span class="mark">Receptura<em>.</em></span>
+      <span class="sub">przepisy</span>
+    </div>
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="searchbox" type="text" placeholder="Szukaj po nazwie, składniku, tagu…" autocomplete="off">
+    </div>
+    <div class="top-actions">
+      <button class="btn-ghost btn-sm navbtn on" data-nav="home" onclick="location.hash=''" title="Wszystkie przepisy">Przepisy</button>
+      <button class="btn-ghost btn-sm navbtn" data-nav="szukaj" onclick="location.hash='#/szukaj'" title="Szukaj dania po produktach które masz">Co ugotować?</button>
+      <button class="btn-ghost btn-sm navbtn" data-nav="tagi" onclick="location.hash='#/tagi'" title="Zarządzaj tagami">Tagi</button>
+      <span style="width:1px;height:22px;background:var(--line);margin:0 4px"></span>
+      <button class="btn-ghost btn-sm" onclick="openImport()" title="Importuj przepis z tekstu">⇱ Wklej</button>
+      <button class="btn-ghost btn-sm" onclick="exportData()" title="Zapisz kopię wszystkich przepisów">⇩ Eksport</button>
+      <button class="btn-ghost btn-sm" onclick="document.getElementById('importfile').click()" title="Wczytaj kopię">⇧ Import</button>
+      <input type="file" id="importfile" accept="application/json" style="display:none" onchange="importData(event)">
+      <button class="btn-primary btn-sm" onclick="openEditor()">+ Nowy przepis</button>
+    </div>
+  </div>
+</header>
+
+<main class="app" id="main"></main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+/* =========================================================================
+   RECEPTURA — menedżer przepisów
+   Dane w IndexedDB. Jeden plik. Współdzielone między kartami.
+   ========================================================================= */
+
+/* ---------- IndexedDB warstwa ---------- */
+const DB_NAME='kartoteka', DB_VER=1, STORE='recipes';
+let db=null;
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open(DB_NAME,DB_VER);
+    req.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains(STORE)){
+        d.createObjectStore(STORE,{keyPath:'id'});
+      }
+    };
+    req.onsuccess=e=>{db=e.target.result;res(db)};
+    req.onerror=e=>rej(e.target.error);
+  });
+}
+function tx(mode){return db.transaction(STORE,mode).objectStore(STORE);}
+function dbGetAll(){return new Promise((res,rej)=>{const r=tx('readonly').getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+function dbGet(id){return new Promise((res,rej)=>{const r=tx('readonly').get(id);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+function dbPut(rec){return new Promise((res,rej)=>{const r=tx('readwrite').put(rec);r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});}
+function dbDelete(id){return new Promise((res,rej)=>{const r=tx('readwrite').delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error);});}
+
+/* ---------- Stan ---------- */
+let recipes=[];              // wszystkie przepisy w pamięci
+let activeCuisine=null;      // filtr kuchni
+let activeDishes=new Set();  // filtry typów dań (multi)
+let searchQuery='';
+let sortMode='recent';
+let currentDetailId=null;
+let currentServings=null;    // aktualnie wybrana liczba porcji w widoku szczegółów
+
+/* ---------- Model przepisu ----------
+recipe = {
+  id, name, tags:{cuisine:[], dish:[]},
+  baseServings:Number|null,
+  ingredientGroups:[ {title:'', sub:false, items:[ {raw, qty, unit, name, linkId} ] } ],
+  steps:[ '...' ],
+  notes:'', createdAt, updatedAt
+}
+*/
+
+/* ---------- Utils ---------- */
+function uid(){return 'r_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7);}
+function esc(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function toast(msg,isErr){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(isErr?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',2600);}
+
+/* Wyłuskiwanie ilości + jednostki z początku linii składnika.
+   "500g makaron tagliatelle" -> {qty:500, unit:'g', name:'makaron tagliatelle'}
+   "2 ząbki czosnku"          -> {qty:2, unit:'ząbki', name:'czosnku'}
+   "garść tartego sera"       -> {qty:null, unit:'', name:'garść tartego sera'}
+   "1/2 cebuli"               -> {qty:0.5, unit:'', name:'cebuli'} */
+const UNIT_WORDS=['g','kg','dag','mg','ml','l','dl','szt','sztuki','sztuk','łyżka','łyżki','łyżek','łyżeczka','łyżeczki','łyżeczek','szklanka','szklanki','szklanek','ząbek','ząbki','ząbków','ząbka','plaster','plastry','plastrów','opakowanie','opakowania','puszka','puszki','garść','szczypta','cm','kostka','kostki'];
+function parseIngredientLine(raw){
+  raw=(raw||'').trim();
+  if(!raw) return {raw:'',qty:null,unit:'',name:''};
+  // dopasuj wiodącą liczbę: ułamek a/b, liczba mieszana "1 1/2", zakres a-b, dziesiętna z . lub ,
+  const m=raw.match(/^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?)\s*([^\s0-9]+)?\s*(.*)$/);
+  if(!m) return {raw,qty:null,unit:'',name:raw};
+  let numStr=m[1], maybeUnit=(m[2]||'').trim(), rest=(m[3]||'').trim();
+  let qty=parseNum(numStr);
+  let unit='';
+  // czy token po liczbie to jednostka? (np "g", "ml") albo słowo-jednostka
+  if(maybeUnit){
+    const low=maybeUnit.toLowerCase().replace(/[.,]$/,'');
+    if(UNIT_WORDS.includes(low) || /^[a-ząćęłńóśźż]{1,6}$/i.test(low) && low.length<=4){
+      unit=maybeUnit;
+    }else{
+      // to nie jednostka — dokleić z powrotem do nazwy
+      rest=(maybeUnit+' '+rest).trim();
+    }
+  }
+  // słowo-jednostka na początku "rest" (np "2 ząbki czosnku": maybeUnit pusty bo ząbki ma litery? -> obsłuż)
+  if(!unit && rest){
+    const firstWord=rest.split(/\s+/)[0].toLowerCase().replace(/[.,]$/,'');
+    if(UNIT_WORDS.includes(firstWord)){
+      unit=rest.split(/\s+/)[0];
+      rest=rest.slice(unit.length).trim();
+    }
+  }
+  return {raw,qty:isNaN(qty)?null:qty,unit,name:rest||raw};
+}
+function parseNum(s){
+  s=s.trim();
+  // liczba mieszana "1 1/2"
+  const mixed=s.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+  if(mixed)return parseInt(mixed[1])+parseInt(mixed[2])/parseInt(mixed[3]);
+  if(s.includes('/')){const[a,b]=s.split('/');return parseFloat(a)/parseFloat(b);}
+  if(/[-–]/.test(s)){const p=s.split(/[-–]/);return parseFloat(p[0].replace(',','.'));} // zakres: bierz dolną granicę
+  return parseFloat(s.replace(',','.'));
+}
+function fmtQty(n){
+  if(n==null) return '';
+  if(Number.isInteger(n)) return String(n);
+  // ładne ułamki
+  const frac={0.25:'¼',0.5:'½',0.75:'¾',0.33:'⅓',0.67:'⅔'};
+  const whole=Math.floor(n), rem=+(n-whole).toFixed(2);
+  if(frac[rem]) return (whole?whole:'')+frac[rem];
+  return (+n.toFixed(2)).toString().replace('.',',');
+}
+
+/* ---------- Router (hash-based, żeby działały osobne karty) ---------- */
+function goHome(){location.hash='';}
+function openDetail(id){location.hash='#/r/'+id;}
+window.addEventListener('hashchange',route);
+function route(){
+  const h=location.hash;
+  const m=h.match(/^#\/r\/(.+)$/);
+  if(m){renderDetail(m[1]);}
+  else if(h==='#/szukaj'){renderIngredientSearch();}
+  else if(h==='#/tagi'){renderTagManager();}
+  else{renderList();}
+}
+function setNav(active){
+  document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('on',b.dataset.nav===active));
+}
+
+/* ---------- Zbieranie tagów ---------- */
+function allTags(kind){
+  const s=new Set();
+  recipes.forEach(r=>(r.tags?.[kind]||[]).forEach(t=>s.add(t)));
+  return [...s].sort((a,b)=>a.localeCompare(b,'pl'));
+}
+
+/* ---------- Renderowanie listy ---------- */
+function renderList(){
+  currentDetailId=null;
+  setNav('home');
+  const main=document.getElementById('main');
+  const cuisines=allTags('cuisine');
+  const dishes=allTags('dish');
+
+  // filtrowanie
+  let list=recipes.slice();
+  if(activeCuisine) list=list.filter(r=>(r.tags?.cuisine||[]).includes(activeCuisine));
+  if(activeDishes.size) list=list.filter(r=>[...activeDishes].every(d=>(r.tags?.dish||[]).includes(d)));
+  if(searchQuery){
+    const q=searchQuery.toLowerCase();
+    list=list.filter(r=>{
+      if(r.name.toLowerCase().includes(q)) return true;
+      if((r.tags?.cuisine||[]).some(t=>t.toLowerCase().includes(q))) return true;
+      if((r.tags?.dish||[]).some(t=>t.toLowerCase().includes(q))) return true;
+      const ings=(r.ingredientGroups||[]).flatMap(g=>g.items.map(i=>i.name));
+      if(ings.some(n=>(n||'').toLowerCase().includes(q))) return true;
+      return false;
+    });
+  }
+  // sortowanie
+  if(sortMode==='recent') list.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  else if(sortMode==='name') list.sort((a,b)=>a.name.localeCompare(b.name,'pl'));
+  else if(sortMode==='oldest') list.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+
+  let html='';
+
+  // filterbar
+  html+='<div class="filterbar">';
+  if(cuisines.length){
+    html+='<span class="label">Kuchnia</span>';
+    cuisines.forEach(c=>{
+      html+=`<button class="chip cuisine ${activeCuisine===c?'on':''}" onclick="toggleCuisine('${esc(c)}')">${esc(c)}</button>`;
+    });
+  }
+  html+='</div>';
+  if(dishes.length){
+    html+='<div class="filterbar">';
+    html+='<span class="label">Danie</span>';
+    dishes.forEach(d=>{
+      html+=`<button class="chip ${activeDishes.has(d)?'on':''}" onclick="toggleDish('${esc(d)}')">${esc(d)}</button>`;
+    });
+    html+='</div>';
+  }
+
+  // pasek liczby + sort
+  html+=`<div class="filterbar" style="border-top:1px solid var(--line);margin-top:6px;padding-top:14px">
+    <span class="count">${list.length} ${plural(list.length,'przepis','przepisy','przepisów')}${(activeCuisine||activeDishes.size||searchQuery)?' (z '+recipes.length+')':''}</span>
+    <select class="sortsel" onchange="setSort(this.value)">
+      <option value="recent"${sortMode==='recent'?' selected':''}>Ostatnio zmienione</option>
+      <option value="name"${sortMode==='name'?' selected':''}>Alfabetycznie</option>
+      <option value="oldest"${sortMode==='oldest'?' selected':''}>Najstarsze</option>
+    </select>
+  </div>`;
+
+  // grid
+  html+='<div class="grid">';
+  if(!list.length){
+    if(!recipes.length){
+      html+=`<div class="empty">
+        <div class="big">Pusta receptura</div>
+        <p>Dodaj pierwszy przepis ręcznie albo wklej gotowy tekst ze strony kulinarnej.</p>
+        <button class="btn-primary" onclick="openEditor()">+ Dodaj pierwszy przepis</button>
+        <button class="btn" onclick="openImport()" style="margin-left:8px">⇱ Wklej przepis</button>
+      </div>`;
+    }else{
+      html+=`<div class="empty"><div class="big">Nic nie pasuje</div><p>Zmień filtry albo wyczyść wyszukiwanie.</p><button class="btn" onclick="clearFilters()">Wyczyść filtry</button></div>`;
+    }
+  }else{
+    list.forEach((r,i)=>{
+      const linkCount=(r.ingredientGroups||[]).flatMap(g=>g.items).filter(it=>it.linkId).length;
+      const nSteps=(r.steps||[]).filter(Boolean).length;
+      html+=`<div class="rcard" onclick="cardClick(event,'${r.id}')">
+        <span class="idx">${String(i+1).padStart(2,'0')}</span>
+        <h3>${esc(r.name)}</h3>
+        <div class="meta">${nSteps} ${plural(nSteps,'krok','kroki','kroków')}${r.baseServings?' · '+r.baseServings+' '+plural(r.baseServings,'porcja','porcje','porcji'):''}</div>
+        ${linkCount?`<div class="linkbadge">⛓ ${linkCount} ${plural(linkCount,'powiązanie','powiązania','powiązań')}</div>`:''}
+        <div class="tags">
+          ${(r.tags?.cuisine||[]).map(t=>`<span class="t">${esc(t)}</span>`).join('')}
+          ${(r.tags?.dish||[]).map(t=>`<span class="t dish">${esc(t)}</span>`).join('')}
+        </div>
+      </div>`;
+    });
+  }
+  html+='</div>';
+  main.innerHTML=html;
+}
+function plural(n,one,few,many){
+  n=Math.abs(n);
+  if(n===1)return one;
+  if(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20))return few;
+  return many;
+}
+function cardClick(e,id){
+  // Ctrl/Cmd/middle -> nowa karta (natywnie przez URL z hashem)
+  if(e.ctrlKey||e.metaKey){window.open(location.pathname+'#/r/'+id,'_blank');return;}
+  openDetail(id);
+}
+function toggleCuisine(c){activeCuisine=activeCuisine===c?null:c;renderList();}
+function toggleDish(d){if(activeDishes.has(d))activeDishes.delete(d);else activeDishes.add(d);renderList();}
+function clearFilters(){activeCuisine=null;activeDishes.clear();searchQuery='';document.getElementById('searchbox').value='';renderList();}
+function setSort(v){sortMode=v;renderList();}
+
+/* ---------- Widok szczegółów ---------- */
+async function renderDetail(id){
+  const r=recipes.find(x=>x.id===id)||await dbGet(id);
+  if(!r){document.getElementById('main').innerHTML='<div class="detail"><button class="back" onclick="goHome()">← Wróć</button><h1>Nie znaleziono</h1><p>Ten przepis nie istnieje.</p></div>';return;}
+  currentDetailId=id;
+  currentServings=r.baseServings||null;
+  paintDetail(r);
+}
+function paintDetail(r){
+  const main=document.getElementById('main');
+  const scale=(r.baseServings&&currentServings)?currentServings/r.baseServings:1;
+  const scaled=Math.abs(scale-1)>0.001;
+
+  // kto używa tego przepisu?
+  const usedIn=recipes.filter(other=>other.id!==r.id &&
+    (other.ingredientGroups||[]).some(g=>g.items.some(it=>it.linkId===r.id)));
+
+  let html='<div class="detail">';
+  html+=`<button class="back" onclick="goHome()">← Receptura</button>`;
+  html+=`<h1>${esc(r.name)}</h1>`;
+
+  // tagi
+  if((r.tags?.cuisine?.length)||(r.tags?.dish?.length)){
+    html+='<div class="detail-tags">';
+    (r.tags?.cuisine||[]).forEach(t=>html+=`<span class="t">${esc(t)}</span>`);
+    (r.tags?.dish||[]).forEach(t=>html+=`<span class="t dish">${esc(t)}</span>`);
+    html+='</div>';
+  }
+
+  // kontrola porcji
+  if(r.baseServings){
+    html+=`<div class="servings-ctrl">
+      <span class="lbl">Porcje</span>
+      <span class="reset ${scaled?'':'hidden'}" onclick="resetServings(${r.baseServings})">↺ wróć do ${r.baseServings}</span>
+      <div class="stepper">
+        <button onclick="changeServings(-1)" aria-label="mniej">−</button>
+        <span class="val">${currentServings}</span>
+        <button onclick="changeServings(1)" aria-label="więcej">+</button>
+      </div>
+    </div>`;
+  }
+
+  html+='<div class="cols">';
+
+  // składniki
+  html+='<div><div class="section-h">Składniki</div>';
+  (r.ingredientGroups||[]).forEach(g=>{
+    const hasTitle=g.title&&g.title.trim();
+    html+=`<div class="ing-group ${g.sub?'sub':''}">`;
+    if(hasTitle) html+=`<div class="grp-title">${g.sub?'↳ ':''}${esc(g.title)}</div>`;
+    html+='<ul class="ings">';
+    g.items.forEach(it=>{
+      if(!it.name&&!it.raw) return;
+      let qtyHtml='';
+      if(it.qty!=null){
+        const q=it.qty*scale;
+        qtyHtml=`<span class="qty ${scaled?'scaled':''}">${fmtQty(q)}${it.unit?' '+esc(it.unit):''}</span>`;
+      }else{
+        qtyHtml=`<span class="qty"></span>`;
+      }
+      let nameHtml;
+      if(it.linkId){
+        const target=recipes.find(x=>x.id===it.linkId);
+        const label=it.name||(target?target.name:'przepis');
+        nameHtml=`<a class="ing-link" href="#/r/${it.linkId}" onclick="linkClick(event,'${it.linkId}')">${esc(label)}</a>`;
+      }else{
+        nameHtml=esc(it.name||it.raw);
+      }
+      html+=`<li>${qtyHtml}<span class="ing-name">${nameHtml}</span></li>`;
+    });
+    html+='</ul></div>';
+  });
+  html+='</div>';
+
+  // kroki
+  html+='<div><div class="section-h">Przygotowanie</div><ol class="steps">';
+  (r.steps||[]).filter(Boolean).forEach(s=>{html+=`<li>${esc(s)}</li>`;});
+  html+='</ol></div>';
+
+  html+='</div>'; // cols
+
+  // notatki
+  if(r.notes&&r.notes.trim()){
+    html+=`<div class="notes-block"><div class="h">Notatki</div>${esc(r.notes)}</div>`;
+  }
+
+  // używane w
+  if(usedIn.length){
+    html+='<div class="usedin"><div class="h">⛓ Używany w</div>';
+    usedIn.forEach(u=>{html+=`<a href="#/r/${u.id}" onclick="linkClick(event,'${u.id}')">${esc(u.name)}</a>`;});
+    html+='</div>';
+  }
+
+  // akcje
+  const hasSteps=(r.steps||[]).filter(Boolean).length>0;
+  html+=`<div class="detail-actions">
+    ${hasSteps?`<button class="btn-cook" onclick="startCooking('${r.id}')">👨‍🍳 Gotuj</button>`:''}
+    <button onclick="openEditor('${r.id}')">✎ Edytuj</button>
+    <button onclick="duplicateRecipe('${r.id}')">⧉ Duplikuj</button>
+    <div style="flex:1"></div>
+    <button class="btn-danger" onclick="deleteRecipe('${r.id}')">🗑 Usuń</button>
+  </div>`;
+
+  html+='</div>';
+  main.innerHTML=html;
+  window.scrollTo(0,0);
+}
+function linkClick(e,id){
+  if(e.ctrlKey||e.metaKey){return;} // pozwól natywnie otworzyć w nowej karcie
+  e.preventDefault();
+  openDetail(id);
+}
+
+/* =========================================================================
+   TRYB GOTOWANIA — pełny ekran, duże kroki, ekran nie gaśnie (wake lock)
+   ========================================================================= */
+let cookState=null;   // {recipe, step, servings, scale}
+let wakeLock=null;
+
+async function requestWakeLock(){
+  try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release',()=>{}); } }catch(e){/* nie wspierane lub odmowa — trudno */}
+}
+function releaseWakeLock(){ try{ if(wakeLock){wakeLock.release();wakeLock=null;} }catch(e){} }
+// ponów wake lock gdy wrócimy do karty (przeglądarki zwalniają go przy ukryciu)
+document.addEventListener('visibilitychange',()=>{ if(cookState && document.visibilityState==='visible' && !wakeLock)requestWakeLock(); });
+
+function startCooking(id){
+  const r=recipes.find(x=>x.id===id); if(!r)return;
+  const steps=(r.steps||[]).filter(Boolean); if(!steps.length)return;
+  cookState={recipe:r,step:0,servings:currentServings||r.baseServings||null};
+  requestWakeLock();
+  paintCooking();
+}
+function exitCooking(){ cookState=null; releaseWakeLock(); const el=document.getElementById('cook-overlay'); if(el)el.remove(); document.body.style.overflow=''; }
+function cookStep(delta){
+  if(!cookState)return;
+  const steps=(cookState.recipe.steps||[]).filter(Boolean);
+  cookState.step=Math.max(0,Math.min(steps.length-1,cookState.step+delta));
+  paintCooking();
+}
+function paintCooking(){
+  const r=cookState.recipe;
+  const steps=(r.steps||[]).filter(Boolean);
+  const i=cookState.step, total=steps.length;
+  const scale=(r.baseServings&&cookState.servings)?cookState.servings/r.baseServings:1;
+  const scaled=Math.abs(scale-1)>0.001;
+  const last=i===total-1;
+
+  // składniki (zwijane, przeskalowane) — przydatne w trakcie gotowania
+  let ingHtml='';
+  (r.ingredientGroups||[]).forEach(g=>{
+    if(g.title)ingHtml+=`<div class="cook-ing-grp">${g.sub?'↳ ':''}${esc(g.title)}</div>`;
+    g.items.forEach(it=>{
+      if(!it.name&&!it.raw)return;
+      if(it.linkId){ingHtml+=`<div class="cook-ing"><span class="cq"></span>${esc(it.name||'przepis')}</div>`;return;}
+      let q='';
+      if(it.qty!=null){q=fmtQty(it.qty*scale)+(it.unit?' '+esc(it.unit):'');}
+      ingHtml+=`<div class="cook-ing"><span class="cq">${q}</span>${esc(it.name||it.raw)}</div>`;
+    });
+  });
+
+  let html=`<div class="cook-overlay" id="cook-overlay">
+    <div class="cook-head">
+      <button class="cook-x" onclick="exitCooking()" aria-label="Zakończ gotowanie">✕</button>
+      <div class="cook-title">${esc(r.name)}</div>
+      <button class="cook-ings-toggle" onclick="document.getElementById('cook-ings').classList.toggle('open')" aria-label="Składniki">🧺</button>
+    </div>
+    <div class="cook-ings" id="cook-ings">
+      <div class="cook-ings-inner">
+        ${r.baseServings?`<div class="cook-serv">Porcje: <button onclick="cookServings(-1)">−</button> <b>${cookState.servings||r.baseServings}</b> <button onclick="cookServings(1)">+</button>${scaled?' <span class="cook-scaled">(przeskalowane)</span>':''}</div>`:''}
+        ${ingHtml}
+      </div>
+    </div>
+    <div class="cook-body">
+      <div class="cook-stepno">Krok ${i+1} z ${total}</div>
+      <div class="cook-steptext">${esc(steps[i])}</div>
+    </div>
+    <div class="cook-progress"><span style="width:${Math.round((i+1)/total*100)}%"></span></div>
+    <div class="cook-nav">
+      <button class="cook-prev" onclick="cookStep(-1)" ${i===0?'disabled':''}>← Wstecz</button>
+      ${last
+        ? `<button class="cook-done" onclick="exitCooking()">✓ Gotowe</button>`
+        : `<button class="cook-next" onclick="cookStep(1)">Dalej →</button>`}
+    </div>
+  </div>`;
+
+  let el=document.getElementById('cook-overlay');
+  if(el){ el.outerHTML=html; }
+  else{ const d=document.createElement('div'); d.innerHTML=html; document.body.appendChild(d.firstElementChild); document.body.style.overflow='hidden'; }
+}
+function cookServings(delta){
+  if(!cookState)return;
+  const base=cookState.recipe.baseServings||1;
+  cookState.servings=Math.max(1,(cookState.servings||base)+delta);
+  paintCooking();
+}
+// nawigacja strzałkami/spacją na desktopie podczas gotowania
+document.addEventListener('keydown',e=>{
+  if(!cookState)return;
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();cookStep(1);}
+  else if(e.key==='ArrowLeft'){e.preventDefault();cookStep(-1);}
+  else if(e.key==='Escape'){e.preventDefault();exitCooking();}
+});
+function changeServings(delta){
+  currentServings=Math.max(1,currentServings+delta);
+  const r=recipes.find(x=>x.id===currentDetailId);
+  if(r)paintDetail(r);
+}
+function resetServings(base){currentServings=base;const r=recipes.find(x=>x.id===currentDetailId);if(r)paintDetail(r);}
+
+/* =========================================================================
+   WYSZUKIWARKA PO PRODUKTACH — "Co mogę ugotować?"
+   Zaznaczasz produkty które masz, system pokazuje dania które ich używają.
+   ========================================================================= */
+let selectedIngredients=new Set();
+
+/* normalizacja nazwy składnika do porównań: małe litery, bez ilości/jednostek,
+   bez odmiany na tyle na ile się da (proste ucięcie końcówek) */
+function normalizeIngredientName(name){
+  let s=(name||'').toLowerCase().trim();
+  s=s.replace(/\(.*?\)/g,' ');                 // usuń nawiasy
+  s=s.replace(/[.,;:]/g,' ');
+  s=s.replace(/\s+/g,' ').trim();
+  return s;
+}
+/* wyłuskaj "słowa kluczowe" składnika (rzeczowniki), pomijając ilości/jednostki/spójniki */
+const ING_STOP=new Set(['z','ze','i','oraz','lub','do','na','w','po','the','of','g','kg','ml','l','dag','szt','łyżka','łyżki','łyżek','łyżeczka','łyżeczki','łyżeczek','szklanka','szklanki','szklanek','ząbek','ząbki','ząbków','ząbka','garść','szczypta','opakowanie','puszka','plaster','plastry','kostka','kostki','duża','duży','mały','mała','średnia','średni','świeży','świeża','świeże','mielona','mielonej','mielony','drobno','grubo','pokrojona','pokrojony','starty','starta','smaku','opcjonalnie','ok','wg']);
+function ingredientKeywords(name){
+  const norm=normalizeIngredientName(name);
+  return norm.split(' ')
+    .map(w=>w.replace(/^\d+[\/.,]?\d*/,'').trim())  // usuń liczby z przodu
+    .filter(w=>w.length>=3 && !ING_STOP.has(w) && !/^\d/.test(w));
+}
+/* prosty rdzeń słowa (ucięcie polskich końcówek fleksyjnych) do dopasowania */
+function stem(w){
+  w=w.toLowerCase();
+  return w.replace(/(ów|om|ami|ach|ach|em|ie|ą|ę|y|a|i|u|e|o)$/,'');
+}
+function ingredientMatches(recipeKw, wantedKw){
+  const rs=stem(recipeKw), ws=stem(wantedKw);
+  if(!rs||!ws)return false;
+  return rs===ws || rs.startsWith(ws) || ws.startsWith(rs);
+}
+
+/* zbierz wszystkie unikalne produkty z bazy (do podpowiedzi wyboru) */
+function collectAllIngredients(){
+  const map=new Map(); // keyword -> {display, count}
+  recipes.forEach(r=>{
+    (r.ingredientGroups||[]).forEach(g=>g.items.forEach(it=>{
+      if(it.linkId)return; // linki do przepisów pomijamy
+      const kws=ingredientKeywords(it.name||it.raw||'');
+      kws.forEach(kw=>{
+        const key=stem(kw);
+        if(!key)return;
+        if(!map.has(key))map.set(key,{display:kw,count:0});
+        map.get(key).count++;
+      });
+    }));
+  });
+  return [...map.entries()].map(([key,v])=>({key,display:v.display,count:v.count}))
+    .sort((a,b)=>b.count-a.count);
+}
+
+function renderIngredientSearch(){
+  currentDetailId=null;
+  setNav('szukaj');
+  const main=document.getElementById('main');
+  const all=collectAllIngredients();
+
+  // dopasuj przepisy: ile z zaznaczonych produktów zawiera każdy przepis
+  let ranked=[];
+  if(selectedIngredients.size){
+    const wanted=[...selectedIngredients];
+    ranked=recipes.map(r=>{
+      const recipeKws=new Set();
+      (r.ingredientGroups||[]).forEach(g=>g.items.forEach(it=>{
+        if(it.linkId)return;
+        ingredientKeywords(it.name||it.raw||'').forEach(kw=>recipeKws.add(kw));
+      }));
+      const matched=wanted.filter(w=>[...recipeKws].some(rk=>ingredientMatches(rk,w)));
+      return {r,matched:matched.length,total:wanted.length,missing:wanted.length-matched.length};
+    }).filter(x=>x.matched>0)
+      .sort((a,b)=>b.matched-a.matched || a.r.name.localeCompare(b.r.name,'pl'));
+  }
+
+  let html='<div class="searchview">';
+  html+='<h1 class="viewtitle">Co ugotować?</h1>';
+  html+='<p class="viewsub">Zaznacz produkty które masz w domu — pokażę dania, które je wykorzystują, posortowane wg liczby trafień.</p>';
+
+  // zaznaczone produkty
+  html+='<div class="chosen-ings">';
+  if(selectedIngredients.size){
+    [...selectedIngredients].forEach(kw=>{
+      html+=`<span class="tag-pill dish" style="cursor:default">${esc(kw)}<button onclick="toggleIngredient('${esc(kw)}')" title="Usuń">×</button></span>`;
+    });
+    html+=`<button class="btn-sm" style="margin-left:6px" onclick="clearIngredients()">Wyczyść</button>`;
+  }else{
+    html+='<span style="color:var(--ink-soft);font-size:14px">Nic jeszcze nie wybrano.</span>';
+  }
+  html+='</div>';
+
+  // pole dodawania własnego produktu
+  html+=`<div class="ing-add-row">
+    <input id="ing-add-input" type="text" placeholder="Wpisz produkt (np. jajka, pomidory) i Enter — możesz kilka po przecinku" onkeydown="ingAddKey(event)">
+  </div>`;
+
+  // popularne produkty do kliknięcia
+  html+='<div class="pv-h" style="margin:18px 0 8px">Produkty w Twoich przepisach — kliknij, aby dodać:</div>';
+  html+='<div class="ing-cloud">';
+  all.slice(0,60).forEach(ing=>{
+    const on=selectedIngredients.has(ing.display) || [...selectedIngredients].some(s=>stem(s)===ing.key);
+    html+=`<button class="ing-chip ${on?'on':''}" onclick="toggleIngredient('${esc(ing.display)}')">${esc(ing.display)} <span class="c">${ing.count}</span></button>`;
+  });
+  html+='</div>';
+
+  // wyniki
+  if(selectedIngredients.size){
+    html+=`<div class="section-h" style="margin-top:30px">Pasujące dania (${ranked.length})</div>`;
+    if(!ranked.length){
+      html+='<div class="empty" style="padding:40px"><p>Żadne danie nie używa tych produktów. Spróbuj innych.</p></div>';
+    }else{
+      html+='<div class="grid">';
+      ranked.forEach(({r,matched,total,missing})=>{
+        const pct=Math.round(matched/total*100);
+        html+=`<div class="rcard" onclick="cardClick(event,'${r.id}')">
+          <div class="match-badge" title="${matched} z ${total} produktów">${matched}/${total}</div>
+          <h3>${esc(r.name)}</h3>
+          <div class="match-bar"><span style="width:${pct}%"></span></div>
+          <div class="tags">
+            ${(r.tags?.cuisine||[]).map(t=>`<span class="t">${esc(t)}</span>`).join('')}
+            ${(r.tags?.dish||[]).slice(0,2).map(t=>`<span class="t dish">${esc(t)}</span>`).join('')}
+          </div>
+        </div>`;
+      });
+      html+='</div>';
+    }
+  }
+  html+='</div>';
+  main.innerHTML=html;
+  window.scrollTo(0,0);
+}
+function toggleIngredient(kw){
+  // dopasuj po rdzeniu, żeby nie dublować
+  const st=stem(kw);
+  let found=null;
+  selectedIngredients.forEach(s=>{if(stem(s)===st)found=s;});
+  if(found)selectedIngredients.delete(found);
+  else selectedIngredients.add(kw);
+  renderIngredientSearch();
+}
+function clearIngredients(){selectedIngredients.clear();renderIngredientSearch();}
+function ingAddKey(e){
+  if(e.key==='Enter'){
+    const v=e.target.value.trim();
+    if(v){v.split(',').map(x=>x.trim()).filter(Boolean).forEach(p=>{
+      const st=stem(p);let dup=false;selectedIngredients.forEach(s=>{if(stem(s)===st)dup=true;});
+      if(!dup)selectedIngredients.add(p);
+    });e.target.value='';renderIngredientSearch();}
+  }
+}
+
+/* =========================================================================
+   ZAKŁADKA TAGÓW — wgląd i masowa edycja
+   ========================================================================= */
+function renderTagManager(){
+  currentDetailId=null;
+  setNav('tagi');
+  const main=document.getElementById('main');
+  const cuisines=tagUsage('cuisine');
+  const dishes=tagUsage('dish');
+
+  let html='<div class="tagview">';
+  html+='<h1 class="viewtitle">Tagi</h1>';
+  html+='<p class="viewsub">Przegląd wszystkich tagów. Kliknij nazwę, aby zmienić ją we wszystkich przepisach naraz, albo usuń tag z całej bazy.</p>';
+
+  [['cuisine','Kuchnia'],['dish','Typ dania']].forEach(([kind,label])=>{
+    const usage=kind==='cuisine'?cuisines:dishes;
+    html+=`<div class="section-h" style="margin-top:26px">${label} <span style="font-family:var(--mono);font-size:12px;color:var(--ink-soft);text-transform:none;letter-spacing:0">(${usage.length})</span></div>`;
+    html+='<div class="tag-manage-list">';
+    if(!usage.length){html+='<span style="color:var(--ink-soft);font-size:14px">Brak tagów.</span>';}
+    usage.forEach(({tag,count})=>{
+      html+=`<div class="tag-manage-row">
+        <span class="tag-pill ${kind}" style="cursor:default">${esc(tag)}</span>
+        <span class="tm-count">${count} ${plural(count,'przepis','przepisy','przepisów')}</span>
+        <div class="tm-actions">
+          <button class="btn-sm" onclick="renameTag('${kind}','${esc(tag)}')" title="Zmień nazwę wszędzie">✎ Zmień nazwę</button>
+          <button class="btn-sm btn-danger" onclick="deleteTag('${kind}','${esc(tag)}')" title="Usuń z wszystkich przepisów">× Usuń</button>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+  });
+
+  // masowe tagowanie
+  html+=`<div class="section-h" style="margin-top:32px">Masowe tagowanie</div>`;
+  html+=`<p class="viewsub">Dodaj tag do wielu przepisów naraz. Wybierz tag i zaznacz dania.</p>`;
+  html+=`<div class="bulk-tag-controls">
+    <select id="bulk-kind" class="sortsel" onchange="renderBulkList()">
+      <option value="dish">Typ dania</option>
+      <option value="cuisine">Kuchnia</option>
+    </select>
+    <input id="bulk-tag" type="text" class="bulk-input" placeholder="Nazwa tagu do dodania (np. AI, Szybkie)" list="bulk-suggest">
+    <datalist id="bulk-suggest"></datalist>
+    <button class="btn-primary btn-sm" onclick="applyBulkTag()">Dodaj tag do zaznaczonych</button>
+  </div>`;
+  html+='<div id="bulk-list" class="bulk-list"></div>';
+
+  html+='</div>';
+  main.innerHTML=html;
+  renderBulkList();
+  window.scrollTo(0,0);
+}
+function tagUsage(kind){
+  const map=new Map();
+  recipes.forEach(r=>(r.tags?.[kind]||[]).forEach(t=>map.set(t,(map.get(t)||0)+1)));
+  return [...map.entries()].map(([tag,count])=>({tag,count})).sort((a,b)=>b.count-a.count||a.tag.localeCompare(b.tag,'pl'));
+}
+let bulkSelected=new Set();
+function renderBulkList(){
+  const box=document.getElementById('bulk-list');if(!box)return;
+  const kind=document.getElementById('bulk-kind').value;
+  // podpowiedzi tagów
+  const dl=document.getElementById('bulk-suggest');
+  if(dl)dl.innerHTML=allTags(kind).map(t=>`<option value="${esc(t)}">`).join('');
+  const sorted=recipes.slice().sort((a,b)=>a.name.localeCompare(b.name,'pl'));
+  let html='';
+  sorted.forEach(r=>{
+    const checked=bulkSelected.has(r.id)?'checked':'';
+    const tags=(r.tags?.[kind]||[]).join(', ')||'—';
+    html+=`<label class="bulk-item">
+      <input type="checkbox" ${checked} onchange="toggleBulk('${r.id}')">
+      <span class="bulk-name">${esc(r.name)}</span>
+      <span class="bulk-tags">${esc(tags)}</span>
+    </label>`;
+  });
+  box.innerHTML=html;
+}
+function toggleBulk(id){if(bulkSelected.has(id))bulkSelected.delete(id);else bulkSelected.add(id);}
+async function applyBulkTag(){
+  const kind=document.getElementById('bulk-kind').value;
+  const tag=document.getElementById('bulk-tag').value.trim();
+  if(!tag){toast('Wpisz nazwę tagu',true);return;}
+  if(!bulkSelected.size){toast('Zaznacz przynajmniej jeden przepis',true);return;}
+  let n=0;
+  for(const id of bulkSelected){
+    const r=recipes.find(x=>x.id===id);if(!r)continue;
+    r.tags=r.tags||{cuisine:[],dish:[]};r.tags[kind]=r.tags[kind]||[];
+    if(!r.tags[kind].includes(tag)){r.tags[kind].push(tag);r.updatedAt=Date.now();await dbPut(r);n++;}
+  }
+  recipes=await dbGetAll();
+  bulkSelected.clear();
+  document.getElementById('bulk-tag').value='';
+  toast('Dodano tag „'+tag+'" do '+n+' '+plural(n,'przepisu','przepisów','przepisów'));
+  renderTagManager();
+}
+async function renameTag(kind,oldTag){
+  const nw=prompt('Nowa nazwa tagu „'+oldTag+'":',oldTag);
+  if(nw===null)return;
+  const newTag=nw.trim();if(!newTag||newTag===oldTag)return;
+  let n=0;
+  for(const r of recipes){
+    const arr=r.tags?.[kind];if(!arr)continue;
+    const idx=arr.indexOf(oldTag);
+    if(idx>=0){
+      if(arr.includes(newTag))arr.splice(idx,1);   // scal jeśli nowa nazwa już jest
+      else arr[idx]=newTag;
+      r.updatedAt=Date.now();await dbPut(r);n++;
+    }
+  }
+  recipes=await dbGetAll();
+  toast('Zmieniono tag w '+n+' '+plural(n,'przepisie','przepisach','przepisach'));
+  renderTagManager();
+}
+async function deleteTag(kind,tag){
+  const usage=tagUsage(kind).find(x=>x.tag===tag);
+  if(!confirm('Usunąć tag „'+tag+'" z '+(usage?usage.count:0)+' przepisów? Same przepisy zostają.'))return;
+  let n=0;
+  for(const r of recipes){
+    const arr=r.tags?.[kind];if(!arr)continue;
+    const idx=arr.indexOf(tag);
+    if(idx>=0){arr.splice(idx,1);r.updatedAt=Date.now();await dbPut(r);n++;}
+  }
+  recipes=await dbGetAll();
+  toast('Usunięto tag z '+n+' '+plural(n,'przepisu','przepisów','przepisów'));
+  renderTagManager();
+}
+
+/* ---------- CRUD ---------- */
+async function deleteRecipe(id){
+  const r=recipes.find(x=>x.id===id);
+  const usedIn=recipes.filter(o=>o.id!==id&&(o.ingredientGroups||[]).some(g=>g.items.some(it=>it.linkId===id)));
+  let msg='Usunąć „'+(r?r.name:'')+'"?';
+  if(usedIn.length)msg+='\n\nUwaga: jest powiązany z '+usedIn.length+' innym przepisem — te powiązania staną się zwykłym tekstem.';
+  if(!confirm(msg))return;
+  // wyczyść linki wskazujące na usuwany przepis
+  for(const o of usedIn){
+    o.ingredientGroups.forEach(g=>g.items.forEach(it=>{if(it.linkId===id){it.linkId=null;}}));
+    o.updatedAt=Date.now();await dbPut(o);
+  }
+  await dbDelete(id);
+  recipes=await dbGetAll();
+  toast('Usunięto przepis');
+  goHome();
+}
+async function duplicateRecipe(id){
+  const r=recipes.find(x=>x.id===id);if(!r)return;
+  const copy=JSON.parse(JSON.stringify(r));
+  copy.id=uid();copy.name=r.name+' (kopia)';copy.createdAt=Date.now();copy.updatedAt=Date.now();
+  await dbPut(copy);recipes=await dbGetAll();
+  toast('Utworzono kopię');openDetail(copy.id);
+}
+
+/* =========================================================================
+   EDYTOR — budowany przez DOM (bez wstrzykiwania tekstu użytkownika do HTML
+   ani do atrybutów onclick). Eliminuje bugi z apostrofami / znakami spec.
+   ========================================================================= */
+let editorState=null;
+let editorSnapshot=null;  // do wykrywania niezapisanych zmian
+
+function openEditor(id){
+  if(id){
+    const r=recipes.find(x=>x.id===id);
+    editorState=JSON.parse(JSON.stringify(r));
+  }else{
+    editorState={id:uid(),name:'',tags:{cuisine:[],dish:[]},baseServings:null,
+      ingredientGroups:[{title:'',sub:false,items:[{raw:'',qty:null,unit:'',name:'',linkId:null}]}],
+      steps:[''],notes:'',createdAt:Date.now(),updatedAt:Date.now(),_isNew:!id};
+  }
+  editorSnapshot=JSON.stringify(editorState);
+  paintEditor();
+}
+/* czy edytor ma niezapisane zmiany? */
+function editorIsDirty(){
+  if(!editorState)return false;
+  return JSON.stringify(editorState)!==editorSnapshot;
+}
+/* zamknięcie z ochroną przed utratą pracy */
+function tryCloseEditor(){
+  if(editorIsDirty()){
+    if(!confirm('Masz niezapisane zmiany. Zamknąć bez zapisywania?'))return;
+  }
+  closeModal();
+}
+
+/* male helpery do budowy DOM */
+function el(tag,props,...children){
+  const n=document.createElement(tag);
+  if(props)for(const k in props){
+    if(k==='class')n.className=props[k];
+    else if(k==='style')n.style.cssText=props[k];
+    else if(k.startsWith('on')&&typeof props[k]==='function')n.addEventListener(k.slice(2),props[k]);
+    else if(k==='html')n.innerHTML=props[k];
+    else if(props[k]!=null)n.setAttribute(k,props[k]);
+  }
+  children.flat().forEach(c=>{if(c==null)return;n.appendChild(typeof c==='string'?document.createTextNode(c):c);});
+  return n;
+}
+
+function paintEditor(){
+  const s=editorState;
+  const otherRecipes=recipes.filter(r=>r.id!==s.id).sort((a,b)=>a.name.localeCompare(b.name,'pl'));
+
+  const overlay=el('div',{class:'overlay',onclick:(e)=>{if(e.target===overlay)tryCloseEditor();}});
+  const modal=el('div',{class:'modal'});
+  overlay.appendChild(modal);
+
+  // head
+  modal.appendChild(el('div',{class:'modal-head'},
+    el('h2',null,s._isNew?'Nowy przepis':'Edycja przepisu'),
+    el('button',{class:'x',onclick:()=>tryCloseEditor(),title:'Zamknij'},'✕')
+  ));
+
+  const body=el('div',{class:'modal-body'});
+  modal.appendChild(body);
+
+  // nazwa
+  const nameInput=el('input',{type:'text',placeholder:'np. Oklahoma smash burger'});
+  nameInput.value=s.name;
+  nameInput.addEventListener('input',()=>{s.name=nameInput.value;});
+  body.appendChild(el('div',{class:'field'},el('label',null,'Nazwa dania'),nameInput));
+
+  // tagi
+  const twoRow=el('div',{class:'two'});
+  twoRow.appendChild(tagField('cuisine','Kuchnia (tagi)'));
+  twoRow.appendChild(tagField('dish','Typ dania (tagi)'));
+  body.appendChild(twoRow);
+
+  // porcje
+  const servInput=el('input',{type:'number',min:'1',placeholder:'np. 3'});
+  servInput.value=s.baseServings||'';
+  servInput.addEventListener('input',()=>{s.baseServings=servInput.value?Math.max(1,parseInt(servInput.value)):null;});
+  const servLabel=el('label',null,'Bazowa liczba porcji ');
+  servLabel.appendChild(el('span',{style:'text-transform:none;letter-spacing:0'},'(opcjonalne)'));
+  body.appendChild(el('div',{class:'field',style:'max-width:200px'},
+    servLabel,servInput,
+    el('div',{class:'hint'},'Podaj, jeśli chcesz skalowanie porcji w widoku przepisu.')
+  ));
+
+  // składniki
+  const ingHint=el('div',{class:'hint',style:'margin-top:0;margin-bottom:10px'});
+  ingHint.innerHTML='Pisz naturalnie: <code>500g makaron tagliatelle</code>, <code>2 ząbki czosnku</code>. Ilość i jednostkę z początku wyłuskam automatycznie do skalowania porcji.';
+  const ingEditor=el('div',{class:'ing-editor',id:'ing-editor'});
+  s.ingredientGroups.forEach((g,gi)=>ingEditor.appendChild(buildGroup(g,gi,otherRecipes)));
+  body.appendChild(el('div',{class:'field'},
+    el('label',null,'Składniki'),ingHint,ingEditor,
+    el('div',{class:'grp-actions'},
+      el('button',{class:'btn-sm',onclick:()=>addGroup(false)},'+ Sekcja składników'),
+      el('button',{class:'btn-sm',onclick:()=>addGroup(true)},'+ Podsekcja (np. marynata)')
+    )
+  ));
+
+  // kroki
+  const stepsEditor=el('div',{id:'steps-editor'});
+  s.steps.forEach((st,i)=>stepsEditor.appendChild(buildStep(st,i)));
+  const stepHint=el('div',{class:'hint'},'Wskazówka: możesz też wkleić wszystkie kroki naraz do jednego pola — każda nowa linia stanie się osobnym krokiem po zapisaniu.');
+  body.appendChild(el('div',{class:'field'},
+    el('label',null,'Przygotowanie — krok po kroku'),
+    stepsEditor,
+    el('button',{class:'add-row',onclick:addStep},'+ Dodaj krok'),
+    stepHint
+  ));
+
+  // notatki
+  const notesArea=el('textarea',{rows:'2',placeholder:'np. najlepiej smakuje na drugi dzień…'});
+  notesArea.value=s.notes||'';
+  notesArea.addEventListener('input',()=>{s.notes=notesArea.value;});
+  body.appendChild(el('div',{class:'field'},el('label',null,'Notatki (opcjonalne)'),notesArea));
+
+  // foot
+  modal.appendChild(el('div',{class:'modal-foot'},
+    el('button',{onclick:()=>tryCloseEditor()},'Anuluj'),
+    el('div',{class:'spacer'}),
+    el('button',{class:'btn-primary',onclick:saveEditor},s._isNew?'Dodaj przepis':'Zapisz zmiany')
+  ));
+
+  mountModalNode(overlay);
+}
+
+/* pole tagów */
+function tagField(kind,labelText){
+  const s=editorState;
+  const wrap=el('div',{class:'tag-input-wrap'});
+  s.tags[kind].forEach((t,i)=>{
+    const pill=el('span',{class:'tag-pill '+kind},t,
+      el('button',{onclick:()=>{s.tags[kind].splice(i,1);paintEditor();},title:'Usuń tag'},'×'));
+    wrap.appendChild(pill);
+  });
+  const input=el('input',{type:'text',placeholder:'wpisz tag i Enter…'});
+  input.addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'||e.key===','){
+      e.preventDefault();
+      commitTags(kind,input.value);input.value='';
+    }else if(e.key==='Backspace'&&!input.value&&s.tags[kind].length){
+      s.tags[kind].pop();paintEditor();
+    }
+  });
+  // wklejenie wielu naraz (po przecinku)
+  input.addEventListener('paste',(e)=>{
+    const txt=(e.clipboardData||window.clipboardData).getData('text');
+    if(txt&&txt.includes(',')){e.preventDefault();commitTags(kind,txt);input.value='';}
+  });
+  wrap.appendChild(input);
+  wrap.addEventListener('click',(e)=>{if(e.target===wrap)input.focus();});
+
+  const field=el('div',{class:'field'},el('label',null,labelText),wrap);
+
+  // sugestie
+  const existing=new Set(s.tags[kind]);
+  const sugg=allTags(kind).filter(t=>!existing.has(t)).slice(0,8);
+  if(sugg.length){
+    const sg=el('div',{class:'tag-suggest'});
+    sugg.forEach(t=>sg.appendChild(el('button',{onclick:()=>{commitTags(kind,t);}},'+ '+t)));
+    field.appendChild(sg);
+  }
+  return field;
+}
+/* dodaj jeden lub wiele tagów rozdzielonych przecinkiem */
+function commitTags(kind,raw){
+  const parts=raw.split(',').map(x=>x.trim()).filter(Boolean);
+  let changed=false;
+  parts.forEach(p=>{if(!editorState.tags[kind].includes(p)){editorState.tags[kind].push(p);changed=true;}});
+  if(changed)paintEditor();
+  // po repaincie ustaw focus z powrotem na pole tego typu
+  setTimeout(()=>{
+    const inputs=document.querySelectorAll('.tag-input-wrap input');
+    const idx=kind==='cuisine'?0:1;
+    if(inputs[idx])inputs[idx].focus();
+  },20);
+}
+
+/* grupa składników */
+function buildGroup(g,gi,others){
+  const grp=el('div',{class:'grp'+(g.sub?' subgrp':''),'data-gi':gi});
+  const titleInput=el('input',{type:'text',placeholder:g.sub?'Nazwa podsekcji (np. Marynata)':'Nazwa sekcji (opcjonalna)'});
+  titleInput.value=g.title||'';
+  titleInput.addEventListener('input',()=>{g.title=titleInput.value;});
+  const head=el('div',{class:'grp-head'},titleInput);
+
+  if(g.sub){
+    // podsekcja: scalanie w górę (nie kasuje składników)
+    head.appendChild(el('button',{class:'del',style:'font-size:15px',onclick:()=>mergeSubUp(gi),title:'Usuń nagłówek podsekcji — składniki wrócą do sekcji wyżej (nic nie kasujemy)'},'⤴'));
+  }else if(editorState.ingredientGroups.length>1){
+    // sekcja główna gdy jest więcej sekcji: pełne usunięcie
+    head.appendChild(el('button',{class:'del',onclick:()=>removeGroup(gi),title:'Usuń sekcję z zawartością'},'🗑'));
+  }
+  grp.appendChild(head);
+
+  const rows=el('div',{class:'rows'});
+  g.items.forEach((it,ii)=>rows.appendChild(buildIngRow(it,gi,ii,others)));
+  grp.appendChild(rows);
+
+  // przyciski dołu sekcji
+  const foot=el('div',{style:'display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap'});
+  foot.appendChild(el('button',{class:'add-row',style:'flex:1;margin-top:0',onclick:()=>addIngRow(gi)},'+ składnik'));
+
+  if(g.sub){
+    // szybkie przeniesienie składnika z innej sekcji do tej podsekcji
+    const movable=collectMovable(gi);
+    if(movable.length){
+      const moveSel=el('select',{class:'linksel',style:'width:auto;min-width:190px;flex-shrink:0',title:'Przenieś istniejący składnik do tej podsekcji'});
+      moveSel.appendChild(el('option',{value:''},'↳ przenieś składnik tutaj…'));
+      movable.forEach(mv=>{
+        const label=(mv.it.raw||mv.it.name||'(pusty)');
+        moveSel.appendChild(el('option',{value:mv.from+':'+mv.idx},label.length>42?label.slice(0,42)+'…':label));
+      });
+      moveSel.addEventListener('change',()=>{if(moveSel.value)moveIngredientTo(gi,moveSel.value);});
+      foot.appendChild(moveSel);
+    }
+  }
+  grp.appendChild(foot);
+  return grp;
+}
+/* zbierz składniki z INNYCH sekcji, które można przenieść do podsekcji gi */
+function collectMovable(targetGi){
+  const out=[];
+  editorState.ingredientGroups.forEach((g,gi)=>{
+    if(gi===targetGi)return;
+    g.items.forEach((it,idx)=>{
+      if((it.raw&&it.raw.trim())||it.name){out.push({from:gi,idx,it});}
+    });
+  });
+  return out;
+}
+/* przenieś składnik "from:idx" do sekcji targetGi (usuwając z pierwotnego miejsca) */
+function moveIngredientTo(targetGi,token){
+  const [fromStr,idxStr]=token.split(':');
+  const from=+fromStr, idx=+idxStr;
+  const src=editorState.ingredientGroups[from];
+  if(!src||!src.items[idx])return;
+  const [moved]=src.items.splice(idx,1);
+  // jeśli w sekcji docelowej jest pojedynczy pusty placeholder, podmień go
+  const tgt=editorState.ingredientGroups[targetGi];
+  const onlyEmpty=tgt.items.length===1 && !(tgt.items[0].raw&&tgt.items[0].raw.trim())&&!tgt.items[0].name;
+  if(onlyEmpty)tgt.items=[];
+  tgt.items.push(moved);
+  // nie zostawiaj całkiem pustej sekcji-źródła bez wiersza (chyba że to podsekcja — może zostać pusta do scalenia)
+  if(!src.items.length && !src.sub)src.items.push({raw:'',qty:null,unit:'',name:'',linkId:null});
+  paintEditor();
+}
+/* scal podsekcję w górę: usuń nagłówek, przenieś składniki do poprzedniej sekcji */
+function mergeSubUp(gi){
+  const groups=editorState.ingredientGroups;
+  const sub=groups[gi];
+  if(!sub)return;
+  // znajdź najbliższą POPRZEDZAJĄCĄ sekcję główną (nie podsekcję)
+  let targetIdx=-1;
+  for(let i=gi-1;i>=0;i--){ if(!groups[i].sub){targetIdx=i;break;} }
+  if(targetIdx<0){
+    // brak sekcji głównej wyżej — zamień tę podsekcję w zwykłą sekcję bez tytułu
+    // (ale zachowaj tytuł jako składnik, jeśli to nie generyczny nagłówek)
+    promoteTitleToItem(sub);
+    sub.sub=false;sub.title='';paintEditor();return;
+  }
+  const target=groups[targetIdx];
+  // jeśli tytuł podsekcji wygląda jak prawdziwy składnik (np. "passata pomidorowa"),
+  // nie gub go — dodaj jako składnik
+  promoteTitleToItem(sub);
+  // usuń pusty placeholder w sekcji docelowej
+  target.items=target.items.filter(it=>(it.raw&&it.raw.trim())||it.name);
+  sub.items.forEach(it=>{if((it.raw&&it.raw.trim())||it.name)target.items.push(it);});
+  groups.splice(gi,1);
+  if(!target.items.length)target.items.push({raw:'',qty:null,unit:'',name:'',linkId:null});
+  paintEditor();
+}
+/* jeśli tytuł podsekcji to w istocie składnik (a nie nagłówek jak "Sos"/"Marynata"),
+   przenieś go na początek listy składników tej podsekcji, żeby nie zniknął przy scalaniu */
+function promoteTitleToItem(g){
+  const t=(g.title||'').trim();
+  if(!t)return;
+  // generyczne nagłówki, których NIE traktujemy jak składnik
+  const generic=/^(sos|marynata|marynaty|przyprawy|dressing|dip|glazura|posypka|farsz|nadzienie|ciasto|krem|polewa|baza|dodatki|do (podania|dekoracji|serwowania|posypania|smaku)|na wierzch|do środka)\b/i;
+  if(generic.test(t))return;         // to prawdziwy nagłówek — pomiń
+  // wygląda jak składnik: dodaj na początek
+  const p=parseIngredientLine(t);
+  g.items.unshift({raw:t,qty:p.qty,unit:p.unit,name:p.name,linkId:null});
+  g.title='';
+}
+/* wiersz składnika */
+function buildIngRow(it,gi,ii,others){
+  const row=el('div',{class:'ing-row','data-gi':gi,'data-ii':ii});
+  const lineInput=el('input',{class:'line',type:'text',placeholder:'np. 500g makaron'});
+  lineInput.value=it.raw||it.name||'';
+  lineInput.addEventListener('input',()=>{
+    const p=parseIngredientLine(lineInput.value);
+    it.raw=lineInput.value;it.qty=p.qty;it.unit=p.unit;it.name=p.name;
+  });
+  const sel=el('select',{class:'linksel',title:'Połącz z innym przepisem'});
+  sel.appendChild(el('option',{value:''},'— bez linku —'));
+  others.forEach(o=>{
+    const opt=el('option',{value:o.id},'↗ '+o.name);
+    if(it.linkId===o.id)opt.selected=true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change',()=>{it.linkId=sel.value||null;});
+  const del=el('button',{class:'del',onclick:()=>removeIngRow(gi,ii),title:'Usuń'},'×');
+  row.appendChild(lineInput);row.appendChild(sel);row.appendChild(del);
+  return row;
+}
+/* wiersz kroku */
+function buildStep(st,i){
+  const row=el('div',{class:'ing-row','data-si':i});
+  row.appendChild(el('span',{class:'drag'},(i+1)+'.'));
+  const ta=el('textarea',{class:'line',rows:'1',placeholder:'Opisz krok…',style:'resize:vertical;min-height:38px'});
+  ta.value=st||'';
+  ta.addEventListener('input',()=>{editorState.steps[i]=ta.value;autoGrow(ta);});
+  row.appendChild(ta);
+  row.appendChild(el('button',{class:'del',onclick:()=>removeStep(i),title:'Usuń krok'},'×'));
+  setTimeout(()=>autoGrow(ta),0);
+  return row;
+}
+function addGroup(sub){editorState.ingredientGroups.push({title:'',sub:!!sub,items:[{raw:'',qty:null,unit:'',name:'',linkId:null}]});paintEditor();}
+function removeGroup(gi){editorState.ingredientGroups.splice(gi,1);if(!editorState.ingredientGroups.length)editorState.ingredientGroups.push({title:'',sub:false,items:[{raw:'',qty:null,unit:'',name:'',linkId:null}]});paintEditor();}
+function addStep(){editorState.steps.push('');paintEditor();focusLast('#steps-editor textarea');}
+function removeStep(i){editorState.steps.splice(i,1);if(!editorState.steps.length)editorState.steps.push('');paintEditor();}
+function autoGrow(node){node.style.height='auto';node.style.height=node.scrollHeight+'px';}
+function focusLast(sel){setTimeout(()=>{const nodes=document.querySelectorAll(sel);if(nodes.length)nodes[nodes.length-1].focus();},30);}
+function addIngRow(gi){editorState.ingredientGroups[gi].items.push({raw:'',qty:null,unit:'',name:'',linkId:null});paintEditor();focusLast('.grp[data-gi="'+gi+'"] .ing-row input.line');}
+function removeIngRow(gi,ii){const g=editorState.ingredientGroups[gi];g.items.splice(ii,1);if(!g.items.length)g.items.push({raw:'',qty:null,unit:'',name:'',linkId:null});paintEditor();}
+
+function saveEditor(){
+  const s=editorState;
+  s.name=(s.name||'').trim();
+  if(!s.name){toast('Podaj nazwę dania',true);const ni=document.querySelector('.modal-body input[type=text]');if(ni)ni.focus();return;}
+  // rozbij kroki po liniach (obsługa wklejania wielu kroków w jedno pole)
+  const expandedSteps=[];
+  s.steps.forEach(st=>{(st||'').split(/\n/).forEach(line=>{const l=line.trim().replace(/^\d+[\.\)]\s*/,'');if(l)expandedSteps.push(l);});});
+  s.steps=expandedSteps.length?expandedSteps:[''];
+  // wyczyść puste składniki
+  s.ingredientGroups.forEach(g=>{g.items=g.items.filter(it=>(it.raw&&it.raw.trim())||it.name);});
+  s.ingredientGroups=s.ingredientGroups.filter(g=>g.items.length||(g.title&&g.title.trim()));
+  if(!s.ingredientGroups.length)s.ingredientGroups=[{title:'',sub:false,items:[]}];
+  s.updatedAt=Date.now();
+  const newId=s.id;
+  delete s._isNew;
+  dbPut(s).then(async()=>{
+    recipes=await dbGetAll();
+    closeModal();
+    toast('Zapisano przepis');
+    openDetail(newId);
+  }).catch(err=>{toast('Błąd zapisu — spróbuj ponownie',true);console.error(err);});
+}
+
+/* =========================================================================
+   MODAL infra
+   ========================================================================= */
+let modalEl=null;
+function mountModal(html){
+  closeModal(true);
+  const div=document.createElement('div');div.innerHTML=html;modalEl=div.firstElementChild;
+  document.body.appendChild(modalEl);document.body.style.overflow='hidden';
+}
+function mountModalNode(node){
+  closeModal(true);
+  modalEl=node;
+  document.body.appendChild(modalEl);document.body.style.overflow='hidden';
+}
+function closeModal(silent){
+  if(modalEl){modalEl.remove();modalEl=null;}
+  document.body.style.overflow='';
+  if(!silent)editorState=null;   // NIE czyść stanu przy repaincie (silent=true)
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&modalEl){
+    if(editorState)tryCloseEditor();
+    else closeModal();
+  }
+});
+
+/* =========================================================================
+   IMPORT — wklejanie tekstu (JSON-LD w schowku? nie — czysty tekst)
+   Parser: rozpoznaje sekcje "składniki"/"przygotowanie" po nagłówkach,
+   albo dzieli na podstawie struktury.
+   ========================================================================= */
+let importTab='paste';
+let importParsed=null;
+
+function openImport(){
+  importParsed=null;
+  const html=`<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-head"><h2>Wklej przepis</h2><button class="x" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="hint" style="margin-bottom:14px">
+          Skopiuj treść przepisu ze strony (nazwa, składniki, kroki) i wklej poniżej.
+          Rozpoznam sekcje po nagłówkach typu „Składniki" i „Przygotowanie" — a jeśli wkleisz też blok danych ze strony (JSON), spróbuję go odczytać.
+          Po wklejeniu sprawdź podgląd i popraw co trzeba w edytorze.
+        </div>
+        <div class="field">
+          <label>Nazwa dania (jeśli nie wykryję automatycznie)</label>
+          <input type="text" id="imp-name" placeholder="np. Makaron Alfredo">
+        </div>
+        <div class="field">
+          <label>Wklejony tekst przepisu</label>
+          <textarea id="imp-text" rows="10" placeholder="Wklej tutaj całą treść przepisu…&#10;&#10;Składniki:&#10;500g makaronu&#10;2 ząbki czosnku&#10;...&#10;&#10;Przygotowanie:&#10;1. Ugotuj makaron&#10;2. ...&#10;" oninput="livePreview()"></textarea>
+        </div>
+        <div id="imp-preview"></div>
+      </div>
+      <div class="modal-foot">
+        <button onclick="closeModal()">Anuluj</button>
+        <div class="spacer"></div>
+        <button class="btn-primary" onclick="acceptImport()">Otwórz w edytorze →</button>
+      </div>
+    </div>
+  </div>`;
+  mountModal(html);
+  setTimeout(()=>document.getElementById('imp-text').focus(),50);
+}
+
+function livePreview(){
+  const text=document.getElementById('imp-text').value;
+  const nameHint=document.getElementById('imp-name').value.trim();
+  importParsed=parseRecipeText(text,nameHint);
+  const p=importParsed;
+  const box=document.getElementById('imp-preview');
+  if(!text.trim()){box.innerHTML='';return;}
+  let h='<div class="parse-preview">';
+  h+=`<div class="pv-h">Wykryta nazwa</div><div class="pv-title">${esc(p.name||'(brak — podaj ręcznie)')}</div>`;
+  const groups=p.ingredientGroups&&p.ingredientGroups.length?p.ingredientGroups:[{title:'',sub:false,items:p.ingredients||[]}];
+  const totalIngs=groups.reduce((a,g)=>a+g.items.length,0);
+  h+=`<div class="pv-h">Składniki (${totalIngs})</div>`;
+  groups.forEach(g=>{
+    if(g.title)h+=`<div style="font-weight:600;font-size:12.5px;color:var(--accent-ink);margin:6px 0 2px">${g.sub?'↳ ':''}${esc(g.title)}</div>`;
+    h+='<ul>';
+    g.items.slice(0,40).forEach(i=>{const pp=parseIngredientLine(i);h+=`<li>${pp.qty!=null?'<b>'+fmtQty(pp.qty)+(pp.unit?' '+esc(pp.unit):'')+'</b> ':''}${esc(pp.name)}</li>`;});
+    h+='</ul>';
+  });
+  h+=`<div class="pv-h">Kroki (${p.steps.length})</div><ul>`;
+  p.steps.slice(0,30).forEach((s,i)=>h+=`<li>${i+1}. ${esc(s.slice(0,90))}${s.length>90?'…':''}</li>`);
+  h+='</ul></div>';
+  box.innerHTML=h;
+}
+
+/* Parser tekstu przepisu. Zwraca {name, ingredients:[], steps:[]} */
+function parseRecipeText(text,nameHint){
+  text=(text||'').trim();
+  // 1) spróbuj JSON-LD / JSON (użytkownik wkleił blok danych)
+  const jsonld=tryParseJsonLd(text);
+  if(jsonld) return jsonld;
+
+  const lines=text.split(/\r?\n/).map(l=>l.trim());
+  const result={name:nameHint||'',ingredients:[],ingredientGroups:[],steps:[]};
+
+  // Nagłówki sekcji — dopasowują TYLKO gdy cała linia to nagłówek
+  // (samo słowo, ewentualnie z dwukropkiem/myślnikiem), NIE zdanie zaczynające się od tego słowa.
+  const ingHead=/^(składniki|skladniki|ingredients|lista zakupów)\s*[:：-]?\s*$/i;
+  const stepHead=/^(przygotowanie|sposób przygotowania|sposob przygotowania|sposób wykonania|wykonanie|instrukcje|kroki|preparation|instructions|method|directions)\s*[:：-]?\s*$/i;
+  const skipHead=/^(porcje|ilość porcji|liczba porcji|czas|czas przygotowania|czas gotowania|kuchnia|trudność|kalorie|servings|prep time|cook time|total time)\s*[:：-]?\s*.*$/i;
+
+  let mode='pre'; // pre | ing | step
+  const preLines=[];
+  // grupy składników: pierwsza to główna (bez tytułu)
+  let curGroup={title:'',sub:false,items:[]};
+  result.ingredientGroups.push(curGroup);
+
+  for(let raw of lines){
+    if(!raw){continue;}
+    if(ingHead.test(raw)){mode='ing';continue;}
+    if(stepHead.test(raw)){mode='step';continue;}
+    if(mode==='pre'&&skipHead.test(raw)){continue;} // metadane pomijamy tylko w preambule
+
+    if(mode==='pre'){preLines.push(raw);continue;}
+
+    if(mode==='ing'){
+      const clean=cleanIng(raw);
+      // Czy to podnagłówek sekcji składników? (krótka linia, bez liczby na początku,
+      // bez przecinków-wyliczeń, np. "Sos", "Marynata", "Do podania")
+      if(isIngredientSubheader(clean)){
+        curGroup={title:clean.replace(/[:：]\s*$/,''),sub:true,items:[]};
+        result.ingredientGroups.push(curGroup);
+      }else{
+        curGroup.items.push(clean);
+        result.ingredients.push(clean); // płaska lista dla podglądu wstecznie
+      }
+      continue;
+    }
+    if(mode==='step'){result.steps.push(cleanStep(raw));continue;}
+  }
+
+  // nazwa z pierwszej linii preambuły jeśli brak
+  if(!result.name && preLines.length){result.name=preLines[0];}
+
+  // FALLBACK: brak nagłówków — heurystyka
+  if(!result.ingredients.length && !result.steps.length){
+    const guess=heuristicSplit(lines.filter(Boolean),result.name);
+    if(!result.name&&guess.name)result.name=guess.name;
+    result.ingredients=guess.ingredients.filter(i=>i!==result.name);
+    result.steps=guess.steps.filter(s=>s!==result.name);
+    result.ingredientGroups=[{title:'',sub:false,items:result.ingredients.slice()}];
+  }
+  // sprzątanie
+  result.ingredients=result.ingredients.filter(Boolean);
+  result.steps=result.steps.filter(Boolean);
+  result.ingredientGroups=result.ingredientGroups
+    .map(g=>({...g,items:g.items.filter(Boolean)}))
+    .filter(g=>g.items.length||(g.title&&g.title.trim()));
+  if(!result.ingredientGroups.length)result.ingredientGroups=[{title:'',sub:false,items:[]}];
+  return result;
+}
+/* Czy linia w sekcji składników jest podnagłówkiem (np. "Sos", "Marynata")?
+   Kryteria: krótka, nie zaczyna się od liczby/ułamka/miary, brak przecinków (nie wyliczenie),
+   niewiele słów. */
+function isIngredientSubheader(l){
+  if(!l)return false;
+  if(l.length>40)return false;
+  if(/^\d/.test(l))return false;                          // zaczyna się od liczby -> składnik
+  if(l.includes(','))return false;                        // wyliczenie -> składnik
+  const clean=l.replace(/[:：]\s*$/,'').trim();
+  const words=clean.split(/\s+/);
+  const first=words[0].toLowerCase();
+  // pierwsze słowo to miara słowna -> to składnik, nie nagłówek
+  const measureWords=['½','¼','¾','⅓','⅔','pół','ćwierć','garść','garśc','szczypta','kilka','trochę','troche','odrobina','odrobinę','sporo','plaster','plasterek','kostka','listek','listków'];
+  if(measureWords.includes(first))return false;
+  if(words.length>4)return false;                         // za długie na nagłówek
+  // typowe słowa-nagłówki
+  const knownHead=/^(sos|marynata|marynaty|przyprawy|dressing|dip|glazura|posypka|farsz|nadzienie|ciasto|krem|polewa|baza|dodatki)\b/i;
+  if(knownHead.test(clean))return true;
+  if(/^(do )(podania|dekoracji|serwowania|posypania|smaku)/i.test(clean))return true;
+  if(/^(na wierzch|do środka)/i.test(clean))return true;
+  // krótka fraza (1-2 słowa) bez czasownika kuchennego i bez małej litery na starcie zdania
+  const kitchenVerb=/(wymieszać|dodać|pokroić|smażyć|gotować|zmiksować|ubić|podać|obsmażyć|namoczyć|posiekać)/i;
+  if(words.length<=2 && !kitchenVerb.test(clean))return true;
+  return false;
+}
+function cleanIng(l){return l.replace(/^[-–•*·▪◦]\s*/,'').trim();}
+function cleanStep(l){return l.replace(/^\d+[\.\)]\s*/,'').replace(/^(krok\s*\d+[:.\)]?\s*)/i,'').replace(/^[-–•*]\s*/,'').trim();}
+
+/* Heurystyka gdy brak nagłówków:
+   - krótkie linie (z liczbą/jednostką lub <60 znaków, bez kropki na końcu) => składniki
+   - długie zdania (z kropką, >60 znaków, czasowniki) => kroki */
+function heuristicSplit(lines,haveName){
+  const out={name:'',ingredients:[],steps:[]};
+  let rest=lines.slice();
+  // jeśli nie znamy nazwy, pierwsza linia to najpewniej tytuł — zdejmij ją i nie klasyfikuj
+  if(!haveName&&rest.length){out.name=rest[0];rest=rest.slice(1);}
+  const stepVerb=/\b(dodaj|dodać|wymieszaj|wymieszać|gotuj|ugotuj|gotować|podsmaż|smaż|usmaż|smażyć|piecz|upiecz|piec|zdejmij|zdjąć|marynuj|marynować|pokrój|pokroić|kroić|podawaj|podać|wlej|wlać|posiekaj|siekać|dopraw|doprawić|odstaw|odstawić|wstaw|wstawić|zagotuj|dolej|odsącz|odcedź|schłodź|wymieszać|rozgrzej|natrzyj|natrzeć|obtocz|zblenduj|zmiksuj|przełóż|posyp|polej|dus|dusić)\b/i;
+  rest.forEach(l=>{
+    const numbered=/^\d+[\.\)]/.test(l);
+    const hasQty=/^\d+(?:[.,\/]\d+)?\s*[a-ząćęłńóśźż]{0,8}\b/i.test(l) || /^(garść|szczypta|kilka|trochę|pół|ćwierć)\b/i.test(l);
+    const hasVerb=stepVerb.test(l);
+    // krok = numerowany, ALBO ma czasownik-instrukcję, ALBO długie zdanie z interpunkcją
+    const looksLikeStep = numbered || (hasVerb && !hasQty) || (l.length>55 && /[.!,]/.test(l) && !hasQty);
+    if(looksLikeStep){out.steps.push(cleanStep(l));}
+    else{out.ingredients.push(cleanIng(l));}
+  });
+  return out;
+}
+
+/* JSON-LD schema.org/Recipe */
+function tryParseJsonLd(text){
+  // wyłap {...} jeśli wygląda na JSON
+  let jsonText=null;
+  const t=text.trim();
+  if(t.startsWith('{')||t.startsWith('[')){jsonText=t;}
+  else{
+    const m=t.match(/\{[\s\S]*"recipeIngredient"[\s\S]*\}/i);
+    if(m)jsonText=m[0];
+  }
+  if(!jsonText)return null;
+  try{
+    let data=JSON.parse(jsonText);
+    // znajdź obiekt Recipe
+    let rec=findRecipeObj(data);
+    if(!rec)return null;
+    const name=rec.name||'';
+    const ings=(rec.recipeIngredient||rec.ingredients||[]).map(String);
+    let steps=[];
+    const inst=rec.recipeInstructions;
+    if(Array.isArray(inst)){
+      inst.forEach(s=>{if(typeof s==='string')steps.push(s);else if(s.text)steps.push(s.text);else if(s.itemListElement){s.itemListElement.forEach(e=>{if(e.text)steps.push(e.text)});}});
+    }else if(typeof inst==='string'){steps=inst.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);}
+    const flatIngs=ings.map(cleanIng).filter(Boolean);
+    return {name,ingredients:flatIngs,ingredientGroups:[{title:'',sub:false,items:flatIngs}],steps:steps.map(cleanStep).filter(Boolean)};
+  }catch(e){return null;}
+}
+function findRecipeObj(data){
+  if(!data)return null;
+  if(Array.isArray(data)){for(const d of data){const r=findRecipeObj(d);if(r)return r;}return null;}
+  if(typeof data==='object'){
+    const type=data['@type'];
+    if(type&&(type==='Recipe'||(Array.isArray(type)&&type.includes('Recipe'))))return data;
+    if(data['@graph'])return findRecipeObj(data['@graph']);
+    if(data.recipeIngredient)return data;
+  }
+  return null;
+}
+
+function acceptImport(){
+  const text=document.getElementById('imp-text').value;
+  const nameHint=document.getElementById('imp-name').value.trim();
+  const p=parseRecipeText(text,nameHint);
+  if(!p.name && !p.ingredients.length && !p.steps.length){toast('Nie udało się nic wykryć — sprawdź tekst',true);return;}
+  // zbuduj grupy składników z zachowaniem podsekcji (np. "Sos")
+  const groups=(p.ingredientGroups&&p.ingredientGroups.length?p.ingredientGroups:[{title:'',sub:false,items:p.ingredients||[]}])
+    .map(g=>({
+      title:g.title||'',sub:!!g.sub,
+      items:(g.items.length?g.items:[]).map(l=>{const pp=parseIngredientLine(l);return {raw:l,qty:pp.qty,unit:pp.unit,name:pp.name,linkId:null};})
+    }));
+  if(!groups.length||!groups.some(g=>g.items.length))groups.push({title:'',sub:false,items:[{raw:'',qty:null,unit:'',name:'',linkId:null}]});
+  editorState={
+    id:uid(),name:p.name||'',tags:{cuisine:[],dish:[]},baseServings:null,
+    ingredientGroups:groups,
+    steps:p.steps.length?p.steps:[''],notes:'',createdAt:Date.now(),updatedAt:Date.now(),_isNew:true
+  };
+  paintEditor();
+}
+
+/* =========================================================================
+   EKSPORT / IMPORT pliku
+   ========================================================================= */
+function exportData(){
+  const payload={format:'kartoteka',version:1,exportedAt:new Date().toISOString(),recipes};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='receptura-przepisy-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();URL.revokeObjectURL(url);
+  toast('Wyeksportowano '+recipes.length+' '+plural(recipes.length,'przepis','przepisy','przepisów'));
+}
+async function importData(e){
+  const file=e.target.files[0];if(!file)return;
+  try{
+    const text=await file.text();
+    const data=JSON.parse(text);
+    let incoming=Array.isArray(data)?data:(data.recipes||[]);
+    if(!Array.isArray(incoming)||!incoming.length){toast('Plik nie zawiera przepisów',true);return;}
+    const mode=recipes.length?
+      (confirm('Masz już '+recipes.length+' przepisów.\n\nOK = DODAJ wczytane do istniejących\nAnuluj = ZASTĄP wszystkie wczytanymi')?'merge':'replace')
+      :'merge';
+    if(mode==='replace'){
+      for(const r of recipes)await dbDelete(r.id);
+    }
+    let added=0;
+    for(const r of incoming){
+      if(!r.id)r.id=uid();
+      // przy merge: jeśli id koliduje, nadaj nowe
+      if(mode==='merge'&&recipes.some(x=>x.id===r.id))r.id=uid();
+      // walidacja minimalna
+      r.name=r.name||'Bez nazwy';
+      r.tags=r.tags||{cuisine:[],dish:[]};
+      r.ingredientGroups=r.ingredientGroups||[{title:'',sub:false,items:[]}];
+      r.steps=r.steps||[];
+      r.createdAt=r.createdAt||Date.now();r.updatedAt=r.updatedAt||Date.now();
+      await dbPut(r);added++;
+    }
+    recipes=await dbGetAll();
+    toast((mode==='replace'?'Zastąpiono — wczytano ':'Dodano ')+added+' '+plural(added,'przepis','przepisy','przepisów'));
+    goHome();
+  }catch(err){toast('Błąd wczytywania pliku',true);console.error(err);}
+  e.target.value='';
+}
+
+/* =========================================================================
+   Wyszukiwanie + start
+   ========================================================================= */
+document.getElementById('searchbox').addEventListener('input',e=>{
+  searchQuery=e.target.value.trim();
+  if(location.hash&&location.hash!=='#')goHome();
+  else renderList();
+});
+
+/* odśwież gdy inna karta zmieni dane */
+let bc=null;
+try{bc=new BroadcastChannel('kartoteka');bc.onmessage=async()=>{recipes=await dbGetAll();route();};}catch(e){}
+const origPut=dbPut, origDel=dbDelete;
+// powiadamiaj inne karty po zapisie/usunięciu
+function notify(){try{bc&&bc.postMessage('changed');}catch(e){}}
+
+(async function init(){
+  await openDB();
+  recipes=await dbGetAll();
+  route();
+})();
+
+/* opakuj dbPut/dbDelete żeby wysyłały notyfikację (po zdefiniowaniu notify) */
+const _put=dbPut, _del=dbDelete;
+dbPut=async(r)=>{await _put(r);notify();};
+dbDelete=async(id)=>{await _del(id);notify();};
+
+/* ---------- PWA: rejestracja service workera (tylko gdy hostowane po http/https) ---------- */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW rejestracja nieudana:',err));
+  });
+}
+</script>
+</body>
+</html>
