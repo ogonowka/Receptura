@@ -2,7 +2,7 @@
    Cache'uje pliki aplikacji (shell) do działania offline.
    NIE dotyka danych — przepisy żyją w IndexedDB, poza zasięgiem SW.
    Po każdej zmianie w app.html podbij CACHE_VERSION, żeby wymusić odświeżenie. */
-const CACHE_VERSION = 'receptura-v1';
+const CACHE_VERSION = 'receptura-v2';
 const APP_SHELL = [
   './app.html',
   './manifest.json',

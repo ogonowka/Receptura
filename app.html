@@ -357,6 +357,11 @@
   .btn-cook{background:var(--sage);border-color:var(--sage);color:#fff;font-weight:600}
   .btn-cook:hover{background:#4d5e45;border-color:#4d5e45}
 
+  /* wskaźnik logowania */
+  .auth-indicator{display:inline-flex;align-items:center;gap:6px}
+  .auth-email{font-family:var(--mono);font-size:12px;color:var(--sage);max-width:140px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
   /* ---------- TRYB GOTOWANIA (pełny ekran) ---------- */
   .cook-overlay{position:fixed;inset:0;z-index:300;background:var(--paper);display:flex;flex-direction:column;
     padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0);animation:fade .2s ease}
@@ -444,6 +449,8 @@
       <button class="btn-ghost btn-sm" onclick="document.getElementById('importfile').click()" title="Wczytaj kopię">⇧ Import</button>
       <input type="file" id="importfile" accept="application/json" style="display:none" onchange="importData(event)">
       <button class="btn-primary btn-sm" onclick="openEditor()">+ Nowy przepis</button>
+      <span style="width:1px;height:22px;background:var(--line);margin:0 4px"></span>
+      <span id="auth-indicator" class="auth-indicator"></span>
     </div>
   </div>
 </header>
@@ -452,11 +459,97 @@
 
 <div id="toast" class="toast"></div>
 
+<!-- Biblioteka Supabase (ładowana z CDN; działa po http/https, nie z file://) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+
 <script>
 /* =========================================================================
    RECEPTURA — menedżer przepisów
    Dane w IndexedDB. Jeden plik. Współdzielone między kartami.
    ========================================================================= */
+
+/* =========================================================================
+   SUPABASE — konfiguracja i logowanie (Etap 2)
+   Klucz publishable jest jawny i bezpieczny w kodzie front-end — dostęp
+   chroni RLS (bez zalogowania nic nie przejdzie). Apka działa też bez
+   logowania, lokalnie (IndexedDB); logowanie jest potrzebne do synchronizacji.
+   ========================================================================= */
+const SUPABASE_URL='https://kbxnxajnxbbbbvaupmpu.supabase.co';
+const SUPABASE_KEY='sb_publishable_n4DSb-HcghiA8UKqYYdnYQ_I_dqTKXU';
+let sb=null;               // klient Supabase (null gdy biblioteka nie wczytana / offline / file://)
+let currentUser=null;      // zalogowany użytkownik albo null
+
+function initSupabase(){
+  try{
+    if(typeof supabase==='undefined'||!supabase.createClient)return false;
+    sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
+      auth:{persistSession:true,autoRefreshToken:true,storageKey:'receptura-auth'}
+    });
+    return true;
+  }catch(e){console.warn('Supabase init nieudany:',e);return false;}
+}
+async function refreshAuthState(){
+  if(!sb)return;
+  try{
+    const {data}=await sb.auth.getSession();
+    currentUser=data?.session?.user||null;
+  }catch(e){currentUser=null;}
+  updateAuthUI();
+}
+async function doLogin(email,password){
+  if(!sb){toast('Brak połączenia z serwerem synchronizacji',true);return false;}
+  const {data,error}=await sb.auth.signInWithPassword({email:email.trim(),password});
+  if(error){toast('Logowanie nieudane: '+error.message,true);return false;}
+  currentUser=data.user;
+  updateAuthUI();
+  toast('Zalogowano jako '+currentUser.email);
+  return true;
+}
+async function doLogout(){
+  if(!sb)return;
+  await sb.auth.signOut();
+  currentUser=null;
+  updateAuthUI();
+  toast('Wylogowano');
+}
+function updateAuthUI(){
+  const el=document.getElementById('auth-indicator');
+  if(!el)return;
+  if(currentUser){
+    el.innerHTML='<span class="auth-email" title="'+esc(currentUser.email)+'">● '+esc(currentUser.email.split("@")[0])+'</span>'
+      +'<button class="btn-ghost btn-sm" onclick="doLogout()">Wyloguj</button>';
+  }else{
+    const reason=sb?'':' (offline)';
+    el.innerHTML='<button class="btn-ghost btn-sm" onclick="openLogin()">🔑 Zaloguj'+reason+'</button>';
+  }
+}
+function openLogin(){
+  if(!sb){toast('Logowanie wymaga połączenia z internetem',true);return;}
+  const html=`<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-head"><h2>Zaloguj się</h2><button class="x" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="hint" style="margin-bottom:16px">Logowanie jest potrzebne do synchronizacji przepisów między urządzeniami. Bez logowania apka działa lokalnie na tym urządzeniu.</div>
+        <div class="field"><label>E-mail</label><input type="email" id="login-email" autocomplete="username" placeholder="twój@email.pl"></div>
+        <div class="field"><label>Hasło</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitLogin()"></div>
+      </div>
+      <div class="modal-foot">
+        <button onclick="closeModal()">Anuluj</button>
+        <div class="spacer"></div>
+        <button class="btn-primary" onclick="submitLogin()">Zaloguj</button>
+      </div>
+    </div>
+  </div>`;
+  mountModal(html);
+  setTimeout(()=>{const e=document.getElementById('login-email');if(e)e.focus();},50);
+}
+async function submitLogin(){
+  const email=document.getElementById('login-email').value;
+  const pass=document.getElementById('login-pass').value;
+  if(!email||!pass){toast('Podaj e-mail i hasło',true);return;}
+  const ok=await doLogin(email,pass);
+  if(ok)closeModal();
+}
 
 /* ---------- IndexedDB warstwa ---------- */
 const DB_NAME='kartoteka', DB_VER=1, STORE='recipes';
@@ -1880,6 +1973,14 @@ function notify(){try{bc&&bc.postMessage('changed');}catch(e){}}
   await openDB();
   recipes=await dbGetAll();
   route();
+  // Supabase: zainicjuj i odśwież stan logowania (nie blokuje apki jeśli offline)
+  if(initSupabase()){
+    await refreshAuthState();
+    // reaguj na zmiany sesji (logowanie/wylogowanie w innej karcie, wygaśnięcie)
+    sb.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;updateAuthUI();});
+  }else{
+    updateAuthUI();
+  }
 })();
 
 /* opakuj dbPut/dbDelete żeby wysyłały notyfikację (po zdefiniowaniu notify) */
