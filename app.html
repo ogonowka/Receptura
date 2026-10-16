@@ -357,10 +357,11 @@
   .btn-cook{background:var(--sage);border-color:var(--sage);color:#fff;font-weight:600}
   .btn-cook:hover{background:#4d5e45;border-color:#4d5e45}
 
-  /* wskaźnik logowania */
-  .auth-indicator{display:inline-flex;align-items:center;gap:6px}
+  /* wskaźnik logowania i synchronizacji */
+  .auth-indicator,.sync-indicator{display:inline-flex;align-items:center;gap:6px}
   .auth-email{font-family:var(--mono);font-size:12px;color:var(--sage);max-width:140px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sync-dirty{color:var(--amber);border-color:var(--amber)}
 
   /* ---------- TRYB GOTOWANIA (pełny ekran) ---------- */
   .cook-overlay{position:fixed;inset:0;z-index:300;background:var(--paper);display:flex;flex-direction:column;
@@ -450,6 +451,7 @@
       <input type="file" id="importfile" accept="application/json" style="display:none" onchange="importData(event)">
       <button class="btn-primary btn-sm" onclick="openEditor()">+ Nowy przepis</button>
       <span style="width:1px;height:22px;background:var(--line);margin:0 4px"></span>
+      <span id="sync-indicator" class="sync-indicator"></span>
       <span id="auth-indicator" class="auth-indicator"></span>
     </div>
   </div>
@@ -514,14 +516,16 @@ async function doLogout(){
 }
 function updateAuthUI(){
   const el=document.getElementById('auth-indicator');
-  if(!el)return;
-  if(currentUser){
-    el.innerHTML='<span class="auth-email" title="'+esc(currentUser.email)+'">● '+esc(currentUser.email.split("@")[0])+'</span>'
-      +'<button class="btn-ghost btn-sm" onclick="doLogout()">Wyloguj</button>';
-  }else{
-    const reason=sb?'':' (offline)';
-    el.innerHTML='<button class="btn-ghost btn-sm" onclick="openLogin()">🔑 Zaloguj'+reason+'</button>';
+  if(el){
+    if(currentUser){
+      el.innerHTML='<span class="auth-email" title="'+esc(currentUser.email)+'">● '+esc(currentUser.email.split("@")[0])+'</span>'
+        +'<button class="btn-ghost btn-sm" onclick="doLogout()">Wyloguj</button>';
+    }else{
+      const reason=sb?'':' (offline)';
+      el.innerHTML='<button class="btn-ghost btn-sm" onclick="openLogin()">🔑 Zaloguj'+reason+'</button>';
+    }
   }
+  if(typeof updateSyncUI==='function')updateSyncUI();
 }
 function openLogin(){
   if(!sb){toast('Logowanie wymaga połączenia z internetem',true);return;}
@@ -548,7 +552,142 @@ async function submitLogin(){
   const pass=document.getElementById('login-pass').value;
   if(!email||!pass){toast('Podaj e-mail i hasło',true);return;}
   const ok=await doLogin(email,pass);
-  if(ok)closeModal();
+  if(ok){closeModal(); await afterLoginSync();}
+}
+
+/* =========================================================================
+   SYNCHRONIZACJA (Etap 2c) — model "Wyślij / Pobierz" + ochrona
+   Chmura: jeden rekord w tabeli recipe_store (id='main'), data = {recipes:[...]}.
+   Lokalnie pamiętamy znacznik ostatnio widzianej wersji chmury oraz czy mamy
+   niewysłane zmiany.
+   ========================================================================= */
+const LS_SEEN='receptura-cloud-seen';     // updated_at ostatnio widzianej chmury
+const LS_DIRTY='receptura-local-dirty';   // '1' gdy lokalne zmiany niewysłane
+
+function markLocalDirty(){ try{localStorage.setItem(LS_DIRTY,'1');}catch(e){} updateSyncUI(); }
+function clearLocalDirty(){ try{localStorage.removeItem(LS_DIRTY);}catch(e){} updateSyncUI(); }
+function isLocalDirty(){ try{return localStorage.getItem(LS_DIRTY)==='1';}catch(e){return false;} }
+function getSeen(){ try{return localStorage.getItem(LS_SEEN)||null;}catch(e){return null;} }
+function setSeen(ts){ try{ts?localStorage.setItem(LS_SEEN,ts):localStorage.removeItem(LS_SEEN);}catch(e){} }
+
+/* odczyt metadanych chmury (bez pobierania całej bazy) */
+async function cloudMeta(){
+  const {data,error}=await sb.from('recipe_store').select('updated_at,data').eq('id','main').maybeSingle();
+  if(error)throw error;
+  const count=data?.data?.recipes?.length ?? 0;
+  return {updatedAt:data?.updated_at||null, count, exists:!!data};
+}
+/* pełne pobranie bazy z chmury */
+async function cloudPull(){
+  const {data,error}=await sb.from('recipe_store').select('data,updated_at').eq('id','main').maybeSingle();
+  if(error)throw error;
+  return {recipes:data?.data?.recipes||[], updatedAt:data?.updated_at||null};
+}
+/* zapis bazy do chmury; zwraca nowy updated_at */
+async function cloudPush(recipesArr){
+  const payload={id:'main',data:{recipes:recipesArr},updated_at:new Date().toISOString(),
+    updated_by:currentUser?currentUser.email:null};
+  const {data,error}=await sb.from('recipe_store').upsert(payload).select('updated_at').maybeSingle();
+  if(error)throw error;
+  return data?.updated_at||payload.updated_at;
+}
+
+/* --- WYŚLIJ do chmury --- */
+async function syncPush(force){
+  if(!sb||!currentUser){toast('Zaloguj się, aby synchronizować',true);return;}
+  try{
+    const meta=await cloudMeta();
+    // ochrona: czy chmura zmieniła się od ostatnio widzianej?
+    if(!force && meta.exists && meta.updatedAt && getSeen() && meta.updatedAt!==getSeen()){
+      confirmModal('W chmurze jest nowsza wersja',
+        'Ktoś (lub inne urządzenie) zapisał bazę w chmurze po tym, jak ostatnio ją widziałeś. '+
+        'Wysłanie teraz nadpisze tamte zmiany Twoją lokalną bazą ('+recipes.length+' przepisów). '+
+        'Zalecam najpierw Pobrać i scalić. Nadpisać mimo to?',
+        'Nadpisz chmurę', ()=>syncPush(true));
+      return;
+    }
+    const newTs=await cloudPush(recipes);
+    setSeen(newTs); clearLocalDirty();
+    toast('Wysłano '+recipes.length+' '+plural(recipes.length,'przepis','przepisy','przepisów')+' do chmury');
+  }catch(e){ toast('Błąd wysyłania: '+(e.message||e),true); console.error(e); }
+}
+
+/* --- POBIERZ z chmury --- */
+async function syncPull(force){
+  if(!sb||!currentUser){toast('Zaloguj się, aby synchronizować',true);return;}
+  try{
+    // ochrona: masz lokalne niewysłane zmiany?
+    if(!force && isLocalDirty()){
+      confirmModal('Masz lokalne zmiany',
+        'Na tym urządzeniu są zmiany, których jeszcze nie wysłano do chmury. '+
+        'Pobranie nadpisze lokalną bazę wersją z chmury i te zmiany przepadną. Pobrać mimo to?',
+        'Pobierz i nadpisz', ()=>syncPull(true));
+      return;
+    }
+    const {recipes:cloudRecipes,updatedAt}=await cloudPull();
+    // zapisz do IndexedDB (zastąp całość) — bez oznaczania jako lokalne zmiany
+    suppressDirty=true;
+    try{
+      for(const r of recipes){await dbDelete(r.id);}
+      for(const r of cloudRecipes){await dbPut(r);}
+    }finally{suppressDirty=false;}
+    recipes=await dbGetAll();
+    setSeen(updatedAt); clearLocalDirty();
+    route();
+    toast('Pobrano '+cloudRecipes.length+' '+plural(cloudRecipes.length,'przepis','przepisy','przepisów')+' z chmury');
+  }catch(e){ toast('Błąd pobierania: '+(e.message||e),true); console.error(e); }
+}
+
+/* --- po zalogowaniu / przy starcie: sprawdź chmurę i zaproponuj akcję --- */
+async function afterLoginSync(){
+  if(!sb||!currentUser)return;
+  try{
+    const meta=await cloudMeta();
+    // pierwszy raz: chmura pusta, lokalnie coś jest
+    if((!meta.exists || meta.count===0) && recipes.length>0){
+      confirmModal('Chmura jest pusta',
+        'W chmurze nie ma jeszcze przepisów, a lokalnie masz '+recipes.length+'. '+
+        'Wysłać lokalną bazę do chmury jako punkt startowy?',
+        'Wyślij do chmury', ()=>syncPush(true));
+      return;
+    }
+    // chmura ma dane: czy są nowsze niż ostatnio widziane?
+    if(meta.exists && meta.updatedAt && meta.updatedAt!==getSeen()){
+      const localNote=isLocalDirty()?' (uwaga: masz też lokalne niewysłane zmiany — pobranie je nadpisze)':'';
+      confirmModal('Nowsza wersja w chmurze',
+        'W chmurze jest '+meta.count+' '+plural(meta.count,'przepis','przepisy','przepisów')+', wersja nowsza niż ostatnio pobrana na tym urządzeniu. Pobrać teraz?'+localNote,
+        'Pobierz z chmury', ()=>syncPull(true));
+      return;
+    }
+    updateSyncUI();
+  }catch(e){ console.warn('afterLoginSync:',e); }
+}
+
+/* prosty modal potwierdzenia (tak/nie) */
+function confirmModal(title,body,okLabel,onOk){
+  const html=`<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-head"><h2>${esc(title)}</h2><button class="x" onclick="closeModal()">✕</button></div>
+      <div class="modal-body"><div style="font-size:14.5px;line-height:1.55;color:var(--ink)">${esc(body)}</div></div>
+      <div class="modal-foot">
+        <button onclick="closeModal()">Anuluj</button>
+        <div class="spacer"></div>
+        <button class="btn-primary" id="confirm-ok">${esc(okLabel)}</button>
+      </div>
+    </div>
+  </div>`;
+  mountModal(html);
+  setTimeout(()=>{const b=document.getElementById('confirm-ok');if(b)b.addEventListener('click',()=>{closeModal();onOk();});},10);
+}
+
+function updateSyncUI(){
+  const el=document.getElementById('sync-indicator');
+  if(!el)return;
+  if(!currentUser){el.innerHTML='';return;}
+  const dirty=isLocalDirty();
+  el.innerHTML=
+    '<button class="btn-ghost btn-sm" onclick="syncPull()" title="Pobierz bazę z chmury">⇩ Pobierz</button>'+
+    '<button class="btn-ghost btn-sm'+(dirty?' sync-dirty':'')+'" onclick="syncPush()" title="Wyślij lokalną bazę do chmury">⇧ Wyślij'+(dirty?' •':'')+'</button>';
 }
 
 /* ---------- IndexedDB warstwa ---------- */
@@ -1977,16 +2116,20 @@ function notify(){try{bc&&bc.postMessage('changed');}catch(e){}}
   if(initSupabase()){
     await refreshAuthState();
     // reaguj na zmiany sesji (logowanie/wylogowanie w innej karcie, wygaśnięcie)
-    sb.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;updateAuthUI();});
+    sb.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;updateAuthUI();updateSyncUI();});
+    // jeśli już zalogowany (sesja z poprzedniego razu) — sprawdź chmurę
+    if(currentUser){ updateSyncUI(); await afterLoginSync(); }
   }else{
     updateAuthUI();
   }
 })();
 
-/* opakuj dbPut/dbDelete żeby wysyłały notyfikację (po zdefiniowaniu notify) */
+/* opakuj dbPut/dbDelete żeby wysyłały notyfikację (po zdefiniowaniu notify)
+   oraz oznaczały lokalne zmiany jako niewysłane — POZA trakcie pobierania z chmury */
+let suppressDirty=false;   // true gdy syncPull przepisuje lokalną bazę
 const _put=dbPut, _del=dbDelete;
-dbPut=async(r)=>{await _put(r);notify();};
-dbDelete=async(id)=>{await _del(id);notify();};
+dbPut=async(r)=>{await _put(r);notify();if(!suppressDirty)markLocalDirty();};
+dbDelete=async(id)=>{await _del(id);notify();if(!suppressDirty)markLocalDirty();};
 
 /* ---------- PWA: rejestracja service workera (tylko gdy hostowane po http/https) ---------- */
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
