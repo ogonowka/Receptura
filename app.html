@@ -357,6 +357,46 @@
   .btn-cook{background:var(--sage);border-color:var(--sage);color:#fff;font-weight:600}
   .btn-cook:hover{background:#4d5e45;border-color:#4d5e45}
 
+  /* lista zakupów */
+  .shop-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;
+    padding:0 5px;border-radius:9px;background:var(--accent);color:#fff;font-family:var(--mono);font-size:11px;margin-left:2px}
+  .shopview{padding-bottom:70px;max-width:760px}
+  .shop-add{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  .shop-qty-in{width:70px}.shop-unit-in{width:70px}.shop-name-in{flex:1;min-width:140px}
+  .shop-add input{padding:10px 12px;border:1px solid var(--line-strong);border-radius:9px;font-family:var(--sans);font-size:14px;background:var(--card)}
+  .shop-add input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .shop-add-recipe{margin-bottom:22px}
+  .shop-section-h{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--accent);margin:22px 0 10px;display:flex;align-items:center;gap:10px}
+  .shop-section-h.done{color:var(--ink-soft)}
+  .shop-clear{font-family:var(--sans);font-size:12px;color:var(--amber);background:none;border:none;cursor:pointer;margin-left:auto;text-transform:none;letter-spacing:0}
+  .shop-clear:hover{text-decoration:underline;transform:none}
+  .shop-list{display:flex;flex-direction:column;gap:4px}
+  .shop-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--card);
+    border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:background .1s}
+  .shop-row:hover{background:var(--paper)}
+  .shop-row input[type=checkbox]{width:22px;height:22px;accent-color:var(--sage);cursor:pointer;flex-shrink:0}
+  .shop-qty{font-family:var(--mono);font-size:13.5px;color:var(--accent-ink);font-weight:500;
+    min-width:60px;flex-shrink:0;font-variant-numeric:tabular-nums}
+  .shop-name{flex:1;font-size:15px}
+  .shop-src{font-family:var(--mono);font-size:10.5px;color:var(--ink-soft);background:var(--sage-soft);
+    padding:2px 7px;border-radius:5px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+  .shop-del{background:none;border:none;color:var(--ink-soft);font-size:20px;cursor:pointer;padding:2px 8px;border-radius:7px;flex-shrink:0;line-height:1}
+  .shop-del:hover{color:var(--accent);background:var(--accent-soft);transform:none}
+  .shop-list.done .shop-row{opacity:.55}
+  .shop-row.checked .shop-name{text-decoration:line-through;color:var(--ink-soft)}
+  .shop-footer{margin-top:24px}
+  .afr-list{display:flex;flex-direction:column;gap:4px;max-height:50vh;overflow-y:auto}
+  .afr-item{text-align:left;justify-content:flex-start;width:100%;background:var(--card);border:1px solid var(--line)}
+  .afr-item span{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-left:auto}
+  @media(max-width:560px){
+    .shop-qty-in,.shop-unit-in{width:calc(50% - 4px)}.shop-name-in{flex-basis:100%}
+    .shop-add .btn-primary{width:100%}
+    .shop-row{min-height:50px}
+    .shop-row input[type=checkbox]{width:26px;height:26px}
+    .shop-src{display:none}
+  }
+
   /* wskaźnik logowania i synchronizacji */
   .auth-indicator,.sync-indicator{display:inline-flex;align-items:center;gap:6px}
   .auth-email{font-family:var(--mono);font-size:12px;color:var(--sage);max-width:140px;
@@ -443,6 +483,7 @@
     <div class="top-actions">
       <button class="btn-ghost btn-sm navbtn on" data-nav="home" onclick="location.hash=''" title="Wszystkie przepisy">Przepisy</button>
       <button class="btn-ghost btn-sm navbtn" data-nav="szukaj" onclick="location.hash='#/szukaj'" title="Szukaj dania po produktach które masz">Co ugotować?</button>
+      <button class="btn-ghost btn-sm navbtn" data-nav="zakupy" onclick="location.hash='#/zakupy'" title="Lista zakupów">🛒 Zakupy</button>
       <button class="btn-ghost btn-sm navbtn" data-nav="tagi" onclick="location.hash='#/tagi'" title="Zarządzaj tagami">Tagi</button>
       <span style="width:1px;height:22px;background:var(--line);margin:0 4px"></span>
       <button class="btn-ghost btn-sm" onclick="openImport()" title="Importuj przepis z tekstu">⇱ Wklej</button>
@@ -511,6 +552,7 @@ async function doLogout(){
   if(!sb)return;
   await sb.auth.signOut();
   currentUser=null;
+  clearInterval(shopPullTimer);
   updateAuthUI();
   toast('Wylogowano');
 }
@@ -552,7 +594,7 @@ async function submitLogin(){
   const pass=document.getElementById('login-pass').value;
   if(!email||!pass){toast('Podaj e-mail i hasło',true);return;}
   const ok=await doLogin(email,pass);
-  if(ok){closeModal(); await afterLoginSync();}
+  if(ok){closeModal(); await afterLoginSync(); startShopAutoPull();}
 }
 
 /* =========================================================================
@@ -690,6 +732,248 @@ function updateSyncUI(){
     '<button class="btn-ghost btn-sm'+(dirty?' sync-dirty':'')+'" onclick="syncPush()" title="Wyślij lokalną bazę do chmury">⇧ Wyślij'+(dirty?' •':'')+'</button>';
 }
 
+/* =========================================================================
+   LISTA ZAKUPÓW (Etap 3)
+   Osobny byt od przepisów. Trzymana lokalnie (localStorage) + w chmurze
+   (tabela shopping_list) z autozapisem/autoodczytem (Poziom A).
+   Pozycja: {id, qty, unit, name, checked, src}
+   ========================================================================= */
+const LS_SHOP='receptura-shopping';        // lokalna kopia listy (JSON)
+let shopItems=[];                          // bieżąca lista w pamięci
+let shopSeen=null;                         // updated_at ostatnio widzianej chmury listy
+let shopPushTimer=null;                    // debounce autozapisu
+let shopPullTimer=null;                    // interwał autoodczytu
+
+function shopUid(){return 's_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);}
+
+function loadShopLocal(){
+  try{const raw=localStorage.getItem(LS_SHOP);if(raw){const o=JSON.parse(raw);shopItems=o.items||[];shopSeen=o.seen||null;}}catch(e){shopItems=[];}
+}
+function saveShopLocal(){
+  try{localStorage.setItem(LS_SHOP,JSON.stringify({items:shopItems,seen:shopSeen}));}catch(e){}
+}
+
+/* --- scalanie: dopasuj istniejącą pozycję po rdzeniu nazwy + zgodnej jednostce --- */
+function findMergeTarget(name,unit){
+  const ns=stem(normalizeIngredientName(name));
+  const u=(unit||'').toLowerCase().trim();
+  return shopItems.find(it=>{
+    if(it.checked)return false;                       // nie dokładaj do już kupionych
+    if(stem(normalizeIngredientName(it.name))!==ns)return false;
+    return (it.unit||'').toLowerCase().trim()===u;    // ta sama jednostka (także obie puste)
+  });
+}
+/* dodaj pozycję (ręcznie lub z przepisu); scala gdy się da */
+function shopAdd(name,qty,unit,src){
+  name=(name||'').trim(); if(!name)return;
+  unit=(unit||'').trim();
+  const tgt=findMergeTarget(name,unit);
+  if(tgt){
+    if(tgt.qty!=null && qty!=null)tgt.qty=+(tgt.qty+qty).toFixed(2);
+    else if(tgt.qty==null && qty!=null)tgt.qty=qty;
+    // jeśli obie null — zostaje bez ilości
+  }else{
+    shopItems.push({id:shopUid(),qty:(qty!=null?qty:null),unit,name,checked:false,src:src||null});
+  }
+  shopChanged();
+}
+/* dodaj wszystkie składniki przepisu (przeskalowane) */
+function shopAddFromRecipe(recipeId,servings){
+  const r=recipes.find(x=>x.id===recipeId); if(!r)return 0;
+  const scale=(r.baseServings&&servings)?servings/r.baseServings:1;
+  let n=0;
+  (r.ingredientGroups||[]).forEach(g=>g.items.forEach(it=>{
+    if(it.linkId)return;                 // linki do innych przepisów pomijamy
+    if(!it.name&&!it.raw)return;
+    const q=(it.qty!=null)?+(it.qty*scale).toFixed(2):null;
+    shopAdd(it.name||it.raw,q,it.unit,r.name);
+    n++;
+  }));
+  return n;
+}
+function shopToggle(id){const it=shopItems.find(x=>x.id===id);if(it){it.checked=!it.checked;shopChanged();}}
+function shopRemove(id){shopItems=shopItems.filter(x=>x.id!==id);shopChanged();}
+function shopClearChecked(){shopItems=shopItems.filter(x=>!x.checked);shopChanged();}
+function shopClearAll(){ if(!shopItems.length)return; confirmModal('Wyczyścić całą listę?','Usunie wszystkie pozycje z listy zakupów (także nieodhaczone).','Wyczyść wszystko',()=>{shopItems=[];shopChanged();}); }
+function shopEditQty(id,qty,unit){const it=shopItems.find(x=>x.id===id);if(it){it.qty=(qty===''||qty==null)?null:+qty;if(unit!=null)it.unit=unit;shopChanged();}}
+function shopEditName(id,name){const it=shopItems.find(x=>x.id===id);if(it){it.name=name;shopChanged();}}
+
+/* po każdej zmianie: zapisz lokalnie, odśwież widok, zaplanuj autozapis do chmury */
+function shopChanged(){
+  saveShopLocal();
+  if(location.hash==='#/zakupy')renderShoppingList();
+  updateShopBadge();
+  scheduleShopPush();
+}
+
+/* --- synchronizacja chmury (autozapis z debounce, autoodczyt) --- */
+function scheduleShopPush(){
+  if(!sb||!currentUser)return;
+  clearTimeout(shopPushTimer);
+  shopPushTimer=setTimeout(shopPush,1500);   // po 1.5s ciszy wysyłamy
+}
+async function shopPush(){
+  if(!sb||!currentUser)return;
+  try{
+    const payload={id:'main',data:{items:shopItems},updated_at:new Date().toISOString(),
+      updated_by:currentUser.email};
+    const {data,error}=await sb.from('shopping_list').upsert(payload).select('updated_at').maybeSingle();
+    if(error)throw error;
+    shopSeen=data?.updated_at||payload.updated_at; saveShopLocal();
+  }catch(e){console.warn('shopPush:',e.message||e);/* offline — spróbuje przy następnej zmianie */}
+}
+async function shopPull(silent){
+  if(!sb||!currentUser)return;
+  try{
+    const {data,error}=await sb.from('shopping_list').select('data,updated_at').eq('id','main').maybeSingle();
+    if(error)throw error;
+    const ts=data?.updated_at||null;
+    if(ts && ts!==shopSeen){
+      // chmura ma nowszą wersję niż widziana — przyjmij ją
+      shopItems=data?.data?.items||[];
+      shopSeen=ts; saveShopLocal();
+      if(location.hash==='#/zakupy')renderShoppingList();
+      updateShopBadge();
+      if(!silent)toast('Lista zakupów zaktualizowana');
+    }
+  }catch(e){if(!silent)console.warn('shopPull:',e.message||e);}
+}
+function startShopAutoPull(){
+  clearInterval(shopPullTimer);
+  if(!sb||!currentUser)return;
+  shopPull(true);                              // od razu
+  shopPullTimer=setInterval(()=>{ if(document.visibilityState==='visible')shopPull(true); },15000); // co 15s
+}
+// gdy wracasz do karty/apki — dociągnij świeżą listę
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible')shopPull(true); });
+
+function updateShopBadge(){
+  const btn=document.querySelector('.navbtn[data-nav="zakupy"]');
+  if(!btn)return;
+  const active=shopItems.filter(i=>!i.checked).length;
+  btn.innerHTML='🛒 Zakupy'+(active?' <span class="shop-badge">'+active+'</span>':'');
+}
+
+/* --- widok listy zakupów --- */
+function renderShoppingList(){
+  currentDetailId=null;
+  setNav('zakupy');
+  const main=document.getElementById('main');
+  const active=shopItems.filter(i=>!i.checked);
+  const done=shopItems.filter(i=>i.checked);
+
+  let html='<div class="shopview">';
+  html+='<h1 class="viewtitle">🛒 Lista zakupów</h1>';
+
+  // dodawanie ręczne
+  html+=`<div class="shop-add">
+    <input id="shop-qty" type="text" inputmode="decimal" placeholder="ilość" class="shop-qty-in">
+    <input id="shop-unit" type="text" placeholder="jedn." class="shop-unit-in">
+    <input id="shop-name" type="text" placeholder="co kupić? (np. cebula)" class="shop-name-in" onkeydown="if(event.key==='Enter')shopAddManual()">
+    <button class="btn-primary" onclick="shopAddManual()">Dodaj</button>
+  </div>`;
+  html+=`<div class="shop-add-recipe">
+    <button class="btn-sm" onclick="openAddFromRecipe()">+ Dodaj składniki z przepisu</button>
+  </div>`;
+
+  if(!shopItems.length){
+    html+='<div class="empty" style="padding:50px 20px"><div class="big">Lista jest pusta</div><p>Dodaj coś ręcznie powyżej albo wrzuć składniki z przepisu.</p></div>';
+  }else{
+    // do kupienia
+    html+=`<div class="shop-section-h">Do kupienia (${active.length})</div>`;
+    html+='<div class="shop-list">';
+    active.forEach(it=>html+=shopRowHtml(it));
+    html+='</div>';
+    // kupione
+    if(done.length){
+      html+=`<div class="shop-section-h done">Kupione (${done.length}) <button class="shop-clear" onclick="shopClearChecked()">wyczyść kupione</button></div>`;
+      html+='<div class="shop-list done">';
+      done.forEach(it=>html+=shopRowHtml(it));
+      html+='</div>';
+    }
+    html+=`<div class="shop-footer"><button class="btn-sm btn-danger" onclick="shopClearAll()">Wyczyść całą listę</button></div>`;
+  }
+  html+='</div>';
+  main.innerHTML=html;
+  window.scrollTo(0,0);
+}
+function shopRowHtml(it){
+  const qtyStr=(it.qty!=null?fmtQty(it.qty):'')+(it.unit?' '+esc(it.unit):'');
+  return `<label class="shop-row ${it.checked?'checked':''}">
+    <input type="checkbox" ${it.checked?'checked':''} onchange="shopToggle('${it.id}')">
+    <span class="shop-qty" onclick="event.preventDefault();editShopRow('${it.id}')">${qtyStr?esc(qtyStr):''}</span>
+    <span class="shop-name" onclick="event.preventDefault();editShopRow('${it.id}')">${esc(it.name)}</span>
+    ${it.src?`<span class="shop-src" title="z przepisu: ${esc(it.src)}">${esc(it.src)}</span>`:''}
+    <button class="shop-del" onclick="event.preventDefault();shopRemove('${it.id}')" title="Usuń">×</button>
+  </label>`;
+}
+function shopAddManual(){
+  const qEl=document.getElementById('shop-qty'), uEl=document.getElementById('shop-unit'), nEl=document.getElementById('shop-name');
+  const name=nEl.value.trim(); if(!name){nEl.focus();return;}
+  const qRaw=qEl.value.trim().replace(',','.');
+  const qty=qRaw===''?null:(isNaN(parseFloat(qRaw))?null:parseFloat(qRaw));
+  shopAdd(name,qty,uEl.value.trim(),null);
+  qEl.value='';uEl.value='';nEl.value='';nEl.focus();
+}
+/* edycja pozycji w miejscu (ilość/jednostka/nazwa) */
+function editShopRow(id){
+  const it=shopItems.find(x=>x.id===id); if(!it)return;
+  const html=`<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-head"><h2>Edytuj pozycję</h2><button class="x" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="two">
+          <div class="field"><label>Ilość</label><input type="text" inputmode="decimal" id="es-qty" value="${it.qty!=null?esc(fmtQty(it.qty)):''}"></div>
+          <div class="field"><label>Jednostka</label><input type="text" id="es-unit" value="${esc(it.unit||'')}"></div>
+        </div>
+        <div class="field"><label>Nazwa</label><input type="text" id="es-name" value="${esc(it.name)}" onkeydown="if(event.key==='Enter')saveShopEdit('${id}')"></div>
+      </div>
+      <div class="modal-foot"><button onclick="closeModal()">Anuluj</button><div class="spacer"></div><button class="btn-primary" onclick="saveShopEdit('${id}')">Zapisz</button></div>
+    </div>
+  </div>`;
+  mountModal(html);
+  setTimeout(()=>{const e=document.getElementById('es-name');if(e)e.focus();},40);
+}
+function saveShopEdit(id){
+  const it=shopItems.find(x=>x.id===id); if(!it)return;
+  const q=document.getElementById('es-qty').value.trim().replace(',','.');
+  it.qty=(q===''?null:(isNaN(parseFloat(q))?null:parseFloat(q)));
+  it.unit=document.getElementById('es-unit').value.trim();
+  it.name=document.getElementById('es-name').value.trim()||it.name;
+  closeModal(); shopChanged();
+}
+/* wybór przepisu do dodania składników */
+function openAddFromRecipe(){
+  const sorted=recipes.slice().sort((a,b)=>a.name.localeCompare(b.name,'pl'));
+  let opts=sorted.map(r=>`<button class="afr-item" onclick="pickRecipeForShop('${r.id}')">${esc(r.name)}${r.baseServings?` <span>${r.baseServings} porcji</span>`:''}</button>`).join('');
+  const html=`<div class="overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-head"><h2>Dodaj składniki z przepisu</h2><button class="x" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div class="hint" style="margin-bottom:12px">Wybierz przepis — jego składniki trafią na listę (możesz potem usunąć te, które masz w domu).</div>
+        <input type="text" id="afr-search" placeholder="Szukaj przepisu…" class="bulk-input" style="margin-bottom:12px;width:100%" oninput="filterAfr(this.value)">
+        <div class="afr-list" id="afr-list">${opts}</div>
+      </div>
+    </div>
+  </div>`;
+  mountModal(html);
+  setTimeout(()=>{const e=document.getElementById('afr-search');if(e)e.focus();},40);
+}
+function filterAfr(q){
+  q=q.toLowerCase();
+  document.querySelectorAll('#afr-list .afr-item').forEach(b=>{
+    b.style.display=b.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
+function pickRecipeForShop(recipeId){
+  const r=recipes.find(x=>x.id===recipeId); if(!r)return;
+  const servings=r.baseServings||null;
+  const n=shopAddFromRecipe(recipeId,servings);
+  closeModal();
+  location.hash='#/zakupy';
+  toast('Dodano '+n+' '+plural(n,'składnik','składniki','składników')+' z „'+r.name+'"');
+}
+
 /* ---------- IndexedDB warstwa ---------- */
 const DB_NAME='kartoteka', DB_VER=1, STORE='recipes';
 let db=null;
@@ -801,6 +1085,7 @@ function route(){
   if(m){renderDetail(m[1]);}
   else if(h==='#/szukaj'){renderIngredientSearch();}
   else if(h==='#/tagi'){renderTagManager();}
+  else if(h==='#/zakupy'){renderShoppingList();}
   else{renderList();}
 }
 function setNav(active){
@@ -2111,14 +2396,16 @@ function notify(){try{bc&&bc.postMessage('changed');}catch(e){}}
 (async function init(){
   await openDB();
   recipes=await dbGetAll();
+  loadShopLocal();          // wczytaj lokalną listę zakupów
   route();
+  updateShopBadge();
   // Supabase: zainicjuj i odśwież stan logowania (nie blokuje apki jeśli offline)
   if(initSupabase()){
     await refreshAuthState();
     // reaguj na zmiany sesji (logowanie/wylogowanie w innej karcie, wygaśnięcie)
     sb.auth.onAuthStateChange((_event,session)=>{currentUser=session?.user||null;updateAuthUI();updateSyncUI();});
     // jeśli już zalogowany (sesja z poprzedniego razu) — sprawdź chmurę
-    if(currentUser){ updateSyncUI(); await afterLoginSync(); }
+    if(currentUser){ updateSyncUI(); await afterLoginSync(); startShopAutoPull(); }
   }else{
     updateAuthUI();
   }
